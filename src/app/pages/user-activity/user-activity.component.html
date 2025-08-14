@@ -1,0 +1,37 @@
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title">User Activity Log</h4>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User ID</th>
+                  <th>Action</th>
+                  <th>Timestamp</th>
+                  <th>Details</th>
+                  <th>IP Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let activity of activities">
+                  <td>{{activity.id}}</td>
+                  <td>{{activity.userId}}</td>
+                  <td>{{activity.action}}</td>
+                  <td>{{activity.timestamp | date:'medium'}}</td>
+                  <td>{{activity.details}}</td>
+                  <td>{{activity.ipAddress}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
