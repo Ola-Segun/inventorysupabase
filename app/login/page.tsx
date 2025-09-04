@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Info } from "lucide-react"
+import { Package, Info, AlertCircle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/hooks/useAuth"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 
 const EXAMPLE_ACCOUNTS = [
   { email: "admin@example.com", password: "password", role: "admin" },
@@ -24,38 +25,56 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const { login, user } = useAuth()
+  const [resetEmail, setResetEmail] = useState("")
+  const { signIn, resetPassword, user, isAuthenticated, isLoading } = useSupabaseAuth()
   const [loading, setLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
+  const [resetError, setResetError] = useState("")
   const [showCredentials, setShowCredentials] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [emailNotConfirmed, setEmailNotConfirmed] = useState(false)
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("")
   const { toast } = useToast()
 
-  useEffect(() => {
-    if (user) {
-      router.push("/welcome")
-    }
-  }, [user, router])
+  // Redirect logic is now handled by SupabaseAuthContext
+  // This prevents conflicts between multiple redirect mechanisms
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
     try {
-      await login(email, password)
+      await signIn(email, password)
+
       toast({
         title: "Login Successful",
         description: "You are successfully logged in.",
         variant: "default",
       })
-      router.push("/welcome")
-    } catch (err) {
-      setError("Invalid credentials. Please try again.")
-      toast({
-        title: "Login Failed",
-        description: "Invalid credentials. Please try again.",
-        variant: "destructive",
-      })
+
+      // Redirect will be handled automatically by the useEffect when user state updates
+    } catch (err: any) {
+
+      // Check if it's an email confirmation error
+      if (err.message?.includes('Email not confirmed')) {
+        setEmailNotConfirmed(true)
+        setUnconfirmedEmail(email)
+        setError("Email not confirmed. Please check your email and click the confirmation link, or resend the confirmation email.")
+        toast({
+          title: "Email Confirmation Required",
+          description: "Please check your email and click the confirmation link.",
+          variant: "destructive",
+        })
+      } else {
+        setError(err.message || "Invalid credentials. Please try again.")
+        toast({
+          title: "Login Failed",
+          description: err.message || "Invalid credentials. Please try again.",
+          variant: "destructive",
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -67,23 +86,52 @@ export default function LoginPage() {
     try {
       const account = EXAMPLE_ACCOUNTS.find((acc) => acc.role === role)
       if (account) {
-        await login(account.email, account.password)
+        await signIn(account.email, account.password)
+
         toast({
           title: "Login Successful",
           description: `Logged in as ${role}.`,
           variant: "default",
         })
-        router.push("/welcome")
+
+        // Redirect will be handled automatically by the useEffect when user state updates
       }
-    } catch (err) {
-      setError("Quick access login failed.")
+    } catch (err: any) {
+      setError(err.message || "Quick access login failed.")
       toast({
         title: "Login Failed",
-        description: "Quick access login failed.",
+        description: err.message || "Quick access login failed.",
         variant: "destructive",
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetLoading(true)
+    setResetError("")
+
+    try {
+      await resetPassword(resetEmail)
+
+      toast({
+        title: "Reset Email Sent",
+        description: "Check your email for password reset instructions.",
+        variant: "default",
+      })
+      setShowForgotPassword(false)
+      setResetEmail("")
+    } catch (err: any) {
+      setResetError(err.message || "Failed to send reset email")
+      toast({
+        title: "Error",
+        description: err.message || "Failed to send reset email",
+        variant: "destructive",
+      })
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -106,7 +154,48 @@ export default function LoginPage() {
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4 mt-4">
                 {error && (
-                  <div className="p-3 bg-red-100 border border-red-200 text-red-600 rounded-md text-sm">{error}</div>
+                  <Alert className="mb-4" variant={emailNotConfirmed ? "default" : "destructive"}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {error}
+                      {emailNotConfirmed && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/auth/confirm-email', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ email: unconfirmedEmail }),
+                                })
+
+                                if (response.ok) {
+                                  toast({
+                                    title: "Confirmation Email Sent",
+                                    description: "Please check your email for the confirmation link.",
+                                    variant: "default",
+                                  })
+                                } else {
+                                  throw new Error('Failed to resend confirmation email')
+                                }
+                              } catch (err: any) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to resend confirmation email",
+                                  variant: "destructive",
+                                })
+                              }
+                            }}
+                            className="ml-2"
+                          >
+                            Resend Confirmation
+                          </Button>
+                        </div>
+                      )}
+                    </AlertDescription>
+                  </Alert>
                 )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -122,7 +211,12 @@ export default function LoginPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Button variant="link" className="px-0 text-xs" type="button">
+                    <Button
+                      variant="link"
+                      className="px-0 text-xs"
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                    >
                       Forgot password?
                     </Button>
                   </div>
@@ -192,6 +286,48 @@ export default function LoginPage() {
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* Forgot Password Form */}
+          {showForgotPassword && (
+            <div className="mt-4 p-4 border border-gray-200 dark:border-gray-700 rounded-md">
+              <h3 className="text-lg font-medium mb-2">Reset Password</h3>
+              {resetError && (
+                <Alert className="mb-4" variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{resetError}</AlertDescription>
+                </Alert>
+              )}
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="resetEmail">Email</Label>
+                  <Input
+                    id="resetEmail"
+                    type="email"
+                    placeholder="Enter your email address"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex space-x-2">
+                  <Button type="submit" disabled={resetLoading} className="flex-1">
+                    {resetLoading ? "Sending..." : "Send Reset Email"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowForgotPassword(false)
+                      setResetEmail("")
+                      setResetError("")
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-sm text-center text-muted-foreground">

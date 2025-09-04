@@ -1,34 +1,61 @@
-import { Products } from '../types'
-import axios from 'axios'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/supabase/database.types'
 
-const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
-
+const supabase = createClientComponentClient<Database>()
 
 export const productService = {
-  createProduct: async (product: Products) => {
-    const response = await api.post('/products', product)
-    return response.data
+  createProduct: async (product: any) => {
+    const { data, error } = await supabase
+      .from('products')
+      .insert(product)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
   },
-  updateProduct: async (id: number, product: Products) => {
-    const response = await api.put(`/products/${id}`, product)
-    return response.data
+
+  updateProduct: async (id: string, product: any) => {
+    const { data, error } = await supabase
+      .from('products')
+      .update(product)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
   },
-  deleteProduct: async (id: number) => {
-    const response = await api.delete(`/products/${id}`)
-    return response.data
+
+  deleteProduct: async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return true
   },
-  getProduct: async (id: number) => {
-    const response = await api.get(`/products/${id}`)
-    return response.data
+
+  getProduct: async (id: string) => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data
   },
+
   getProducts: async () => {
-    const response = await api.get('/products')
-    return response.data
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data
   }
 }
 

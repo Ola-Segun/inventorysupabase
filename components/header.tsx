@@ -38,7 +38,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/s
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "./ui/use-toast"
 
-import { useAuth } from "@/hooks/useAuth"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 
 
 interface HeaderProps {
@@ -54,30 +54,68 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const [isLoading, setIsLoading] = useState(false)
   const isMobile = useMobile()
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user, userProfile, store, signOut } = useSupabaseAuth()
   const pathname = usePathname()
   const {toast} = useToast()
 
-  const userRole = user?.role || "guest"
-  const userName = user?.name || "Guest"
+  // Get user role from multiple sources with fallbacks (same logic as sidebar)
+  const userProfileRole = userProfile?.role
+  const userRoleProp = user?.role
+  const userMetadataRole = user?.user_metadata?.role
+  const isStoreOwner = userProfile?.is_store_owner
+
+  // Priority: userProfile.role > JWT token role > user metadata role > default
+  const actualRole = userProfileRole || userRoleProp || userMetadataRole
+
+  // Determine effective role
+  let userRole = "guest"
+  if (user) {
+    if (actualRole) {
+      userRole = actualRole
+    } else if (isStoreOwner) {
+      userRole = "admin"
+    } else {
+      // Check if user might be admin based on email pattern
+      const adminEmails = ['admin', 'olaniyanpaul012@gmail.com']
+      const superAdminEmails = ['superadmin', 'olaniyanpaul012@gmail.com']
+
+      if (superAdminEmails.some(email => user.email?.includes(email))) {
+        userRole = "super_admin"
+      } else if (adminEmails.some(email => user.email?.includes(email))) {
+        userRole = "admin"
+      } else {
+        userRole = "seller"
+      }
+    }
+  }
+
+  const userName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || "Guest"
   const userEmail = user?.email || ""
+  const storeName = store?.name || "Store"
+
+  console.log('Header user role:', userRole)
 
   const handleLogout = async () => {
-
     try {
-      await logout()
-      router.push("/auth")
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
 
+      if (response.ok) {
+        router.push('/login')
+      } else {
+        console.error('Logout failed')
+        // Still redirect even if logout fails
+        router.push('/login')
+      }
     } catch (err) {
       console.error('Logout error:', err)
+      // Still redirect even if logout fails
+      router.push('/login')
     }
-    
-    // // Clear auth data
-    // document.cookie = "auth=; path=/; max-age=0"
-    // localStorage.removeItem("userRole")
-    // localStorage.removeItem("userEmail")
-
-    // // Navigate to login page
   }
 
   const handleProfileClick = () => {
@@ -189,6 +227,16 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
           <ShoppingCart className="h-5 w-5" />
           <span className="text-lg font-bold hidden sm:inline-block">InventoryPOS</span>
         </Link>
+        {store && (
+          <div className="hidden md:flex items-center gap-2 ml-4 pl-4 border-l">
+            <div className="text-sm">
+              <span className="font-medium">{storeName}</span>
+              <span className="text-muted-foreground ml-2">
+                {store.store_type?.replace('_', ' ')}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     
       <div className="flex flex-1 items-center justify-center max-w-xl mx-auto relative">
@@ -340,11 +388,11 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="/placeholder  .svg?height=32&width=32" alt="User" />
+                <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
                 <AvatarFallback>
                   {userName
                     .split(" ")
-                    .map((n) => n[0])
+                    .map((n: string) => n[0])
                     .join("")}
                 </AvatarFallback>
               </Avatar>
@@ -367,12 +415,16 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/settings/store")}>
+              <Settings className="mr-2 h-4 w-4" />
+              Store Settings
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/help")}>
               <HelpCircle className="mr-2 h-4 w-4" />
               Help & Support
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem onClick={signOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Logout
             </DropdownMenuItem>

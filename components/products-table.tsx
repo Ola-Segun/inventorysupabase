@@ -18,8 +18,11 @@ import {
   Plus,
   Barcode,
   QrCode,
+  Building2,
+  Package,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +54,7 @@ import { useEffect } from "react"
 
 import { useProducts } from "@/hooks/useProducts"
 import { productService } from "@/services/productService"
+import { validateProduct, formatCurrency, generateSKU } from "@/lib/validation"
 
 interface Product {
   id: string
@@ -85,6 +89,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Fresh organic apples sourced from local farms. Rich in flavor and nutrients.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "2",
@@ -97,6 +104,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Freshly baked whole wheat bread made with organic flour.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "3",
@@ -109,6 +119,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Organic whole milk from grass-fed cows. No hormones or antibiotics.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "4",
@@ -121,6 +134,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Premium chicken breast, free-range and hormone-free.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "5",
@@ -133,6 +149,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Refreshing sparkling water with natural minerals.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "6",
@@ -145,6 +164,9 @@ const initialProducts: Product[] = [
     status: "draft",
     image: "/placeholder.svg?height=40&width=40",
     description: "Rich chocolate cake with premium cocoa and a smooth ganache topping.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "7",
@@ -157,6 +179,9 @@ const initialProducts: Product[] = [
     status: "archived",
     image: "/placeholder.svg?height=40&width=40",
     description: "Sweet and juicy strawberries, perfect for desserts or snacking.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "8",
@@ -169,6 +194,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Aged cheddar cheese with a sharp flavor profile.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "9",
@@ -181,6 +209,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Premium ground beef, 85% lean, perfect for burgers and meatloaf.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "10",
@@ -193,6 +224,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Freshly squeezed orange juice, no added sugars or preservatives.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
     {
     id: "11",
@@ -205,6 +239,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Freshly squeezed orange juice, no added sugars or preservatives.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
     {
     id: "12",
@@ -217,6 +254,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Freshly squeezed orange juice, no added sugars or preservatives.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
     {
     id: "13",
@@ -229,6 +269,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Freshly squeezed orange juice, no added sugars or preservatives.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "14",
@@ -241,6 +284,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Fresh bananas, perfect for snacking.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "15",
@@ -253,6 +299,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Creamy Greek yogurt, high in protein.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "16",
@@ -265,6 +314,9 @@ const initialProducts: Product[] = [
     status: "draft",
     image: "/placeholder.svg?height=40&width=40",
     description: "Dairy-free almond milk.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "17",
@@ -277,6 +329,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Artisan sourdough bread.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "18",
@@ -289,6 +344,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Lean turkey breast, oven roasted.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "19",
@@ -301,6 +359,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Refreshing sparkling lemonade.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "20",
@@ -313,6 +374,9 @@ const initialProducts: Product[] = [
     status: "draft",
     image: "/placeholder.svg?height=40&width=40",
     description: "Flaky butter croissant.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "21",
@@ -325,6 +389,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "Fresh mozzarella cheese.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "22",
@@ -337,6 +404,9 @@ const initialProducts: Product[] = [
     status: "archived",
     image: "/placeholder.svg?height=40&width=40",
     description: "Lean ground turkey.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
   {
     id: "23",
@@ -349,6 +419,9 @@ const initialProducts: Product[] = [
     status: "active",
     image: "/placeholder.svg?height=40&width=40",
     description: "100% apple juice.",
+    category_id: 1, 
+    created_at: '0', 
+    updated_at: '0'
   },
 ]
 
@@ -408,7 +481,7 @@ const saveProducts = (products: Product[]) => {
       toast({
         title: "Storage limitation",
         description: "Some product details couldn't be saved due to storage limitations.",
-        variant: "warning",
+        variant: "destructive",
       })
     } catch (secondError) {
       console.error("Failed to save even minimal product data:", secondError)
@@ -459,6 +532,7 @@ const loadProducts = (): Product[] => {
 }
 
 export function ProductsTable() {
+  const { user, organization, store } = useSupabaseAuth()
   const [products, setProducts] = useState<Product[]>(loadProducts())
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -592,19 +666,39 @@ export function ProductsTable() {
 
   const handleAddProduct = async () => {
     try {
-      // Validate form
-      if (!newProduct.name || !newProduct.sku || !newProduct.category) {
+      // Validate form using validation utility
+      const validation = validateProduct({
+        name: newProduct.name,
+        sku: newProduct.sku,
+        price: newProduct.price,
+        cost: newProduct.cost,
+        stock: newProduct.stock
+      })
+
+      if (!validation.isValid) {
         toast({
-          title: "Missing required fields",
-          description: "Please fill in all required fields.",
+          title: "Validation Error",
+          description: validation.errors.join(", "),
           variant: "destructive",
         })
         return
       }
 
+      // Auto-generate SKU if not provided
+      let sku = newProduct.sku
+      if (!sku || sku.trim().length === 0) {
+        const existingSKUs = products.map(p => p.sku)
+        sku = generateSKU(newProduct.category || "GEN", existingSKUs)
+      }
+
+      const productToCreate = {
+        ...newProduct,
+        sku: sku
+      }
+
       // Create new product via API
-      const response = await productService.createProduct(newProduct);
-      
+      const response = await productService.createProduct(productToCreate);
+
       // Add to local state
       setProducts([...products, response.data]);
 
@@ -618,7 +712,7 @@ export function ProductsTable() {
       setNewProduct({
         name: "",
         sku: "",
-        category: "Produce", 
+        category: "Produce",
         stock: 0,
         price: 0,
         cost: 0,
@@ -739,6 +833,27 @@ export function ProductsTable() {
 
   return (
     <div className="space-y-4">
+      {/* Organization Header */}
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-4 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-6 w-6 text-green-600" />
+            <div>
+              <h3 className="font-semibold text-lg">{organization?.name || store?.name || "Product Management"}</h3>
+              <p className="text-sm text-muted-foreground">
+                {user?.user_metadata?.name || user?.email} • {products.length} products managed
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              <Package className="h-3 w-3 mr-1" />
+              {products.filter(p => p.status === "active").length} Active
+            </Badge>
+          </div>
+        </div>
+      </div>
+
       <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <TabsList>
@@ -1017,11 +1132,17 @@ export function ProductsTable() {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium">Price</h4>
-                  <p>${selectedProduct.price.toFixed(2)}</p>
+                  <p>{new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: store?.currency || organization?.settings?.currency || 'USD'
+                  }).format(selectedProduct.price)}</p>
                 </div>
                 <div>
                   <h4 className="text-sm font-medium">Cost</h4>
-                  <p>${selectedProduct.cost.toFixed(2)}</p>
+                  <p>{new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: store?.currency || organization?.settings?.currency || 'USD'
+                  }).format(selectedProduct.cost)}</p>
                 </div>
               </div>
 
@@ -1349,7 +1470,12 @@ export function ProductsTable() {
                         {product.stock}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right font-medium">${product.price.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: store?.currency || organization?.settings?.currency || 'USD'
+                      }).format(product.price)}
+                    </TableCell>
                     <TableCell>{getStatusBadge(product.status)}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -1447,4 +1573,4 @@ export function ProductsTable() {
     )
   }
 }
-}
+

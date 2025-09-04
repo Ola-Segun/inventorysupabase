@@ -26,10 +26,15 @@ import {
   Tag,
   User,
   X,
+  Building2,
+  Clock,
+  DollarSign,
 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { MiniOrdersTable } from "./mini-orders-table"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
+import { validateProduct, formatCurrency, generateOrderNumber } from "@/lib/validation"
 
 interface Product {
   id: string
@@ -48,7 +53,7 @@ interface CartItem extends Product {
 interface Category {
   id: string
   name: string
-  icon: JSX.Element
+  icon: React.JSX.Element
 }
 
 // Add more categories to the categories array
@@ -249,6 +254,8 @@ interface ReceiptPrinterProps {
   tax: number
   total: number
   paymentMethod: string
+  organizationName?: string
+  cashierName?: string
   onClose: () => void
 }
 
@@ -261,6 +268,8 @@ export function ReceiptPrinter({
   tax,
   total,
   paymentMethod,
+  organizationName = "Store",
+  cashierName = "Cashier",
   onClose,
 }: ReceiptPrinterProps) {
   return (
@@ -276,9 +285,9 @@ export function ReceiptPrinter({
       <CardContent className="pt-6">
         <div className="space-y-6">
           <div className="text-center">
-            <h2 className="font-bold text-xl">CAFE POS SYSTEM</h2>
-            <p className="text-sm text-muted-foreground">123 Main Street</p>
-            <p className="text-sm text-muted-foreground">City, State 12345</p>
+            <h2 className="font-bold text-xl">{organizationName}</h2>
+            <p className="text-sm text-muted-foreground">POS System</p>
+            <p className="text-sm text-muted-foreground">Cashier: {cashierName}</p>
           </div>
 
           <div className="flex justify-between text-sm">
@@ -340,6 +349,8 @@ export function ReceiptPrinter({
 }
 
 export function SalesInterface() {
+  const { user, organization, store } = useSupabaseAuth()
+
   const [activeCategory, setActiveCategory] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
@@ -358,8 +369,10 @@ export function SalesInterface() {
     tax: number
     total: number
     paymentMethod: string
+    organizationName?: string
+    cashierName?: string
   } | null>(null)
-  
+
   const [currentPage, setCurrentPage] = useState(1)
   const [productsPerPage] = useState(12) // You can adjust this as needed
 
@@ -370,7 +383,7 @@ export function SalesInterface() {
   const cartContainerRef = useRef<HTMLDivElement>(null)
 
   // Add new state for item refs
-  const [itemRefs, setItemRefs] = useState<{ [key: string]: React.RefObject<HTMLDivElement> }>({})
+  const [itemRefs, setItemRefs] = useState<{ [key: string]: React.RefObject<HTMLDivElement | null> }>({})
 
   // Add state for expandable categories
   const [showAllCategories, setShowAllCategories] = useState(false)
@@ -406,9 +419,9 @@ export function SalesInterface() {
   }, [activeCategory, searchQuery, totalPages])
 
 
-  // Calculate cart totals
+  // Calculate cart totals using organization/store settings
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const taxRate = 0.08
+  const taxRate = (store?.settings?.taxRate || organization?.settings?.taxRate || 8) / 100 // Use store or organization tax rate or default to 8%
   const tax = subtotal * taxRate
   const total = subtotal - discountAmount > 0 ? (subtotal - discountAmount) * (1 + taxRate) : 0
 
@@ -417,16 +430,16 @@ export function SalesInterface() {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === product.id)
       const newCart = existingItem
-        ? prevCart.map((item) => 
-            item.id === product.id 
-              ? { ...item, quantity: item.quantity + 1 } 
-              : item
-          )
+        ? prevCart.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
         : [...prevCart, { ...product, quantity: 1 }]
 
       // Create ref for new items
       if (!existingItem) {
-        setItemRefs(prev => ({...prev, [product.id]: createRef<HTMLDivElement>()}))
+        setItemRefs(prev => ({ ...prev, [product.id]: createRef<HTMLDivElement>() }))
       } else {
         // Scroll to existing item and highlight it
         setTimeout(() => {
@@ -468,25 +481,20 @@ export function SalesInterface() {
     }
   }
 
-  const generateOrderNumber = () => {
-    const timestamp = new Date().getTime().toString().slice(-6)
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    return `ORD-${timestamp}-${random}`
-  }
 
   const handleCheckout = () => {
     setIsProcessing(true)
     // Simulate payment processing
     setTimeout(() => {
       const orderNumber = generateOrderNumber()
-      
+
       // Prepare receipt data
       const receiptItems = cart.map(item => ({
         name: item.name,
         quantity: item.quantity,
         price: item.price
       }))
-      
+
       setReceiptData({
         orderNumber,
         date: new Date(),
@@ -494,9 +502,11 @@ export function SalesInterface() {
         subtotal,
         tax,
         total,
-        paymentMethod
+        paymentMethod,
+        organizationName: organization?.name || store?.name || "Store",
+        cashierName: user?.user_metadata?.name || user?.email || "Cashier"
       })
-      
+
       setIsProcessing(false)
       setShowCheckout(false)
       setShowReceipt(true)
@@ -512,356 +522,276 @@ export function SalesInterface() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div className="md:col-span-1 lg:col-span-2">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <CardTitle>Products</CardTitle>
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search products..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 w-full"
-                  />
+    <div className="space-y-4">
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 gap-x-16">
+        {/* Organization Header */}
+        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20 md:col-span-1 lg:col-span-2">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-8 w-8 text-primary" />
+                <div>
+                  <h2 className="text-xl font-bold">{organization?.name || store?.name || "Point of Sale"}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {user?.user_metadata?.name || user?.email} • {new Date().toLocaleDateString()}
+                  </p>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Dynamic Categories with Expandable Button */}
-                <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-                  <div className="relative w-full">
-                    <ScrollArea className="w-full overflow-auto" orientation="horizontal">
-                      <TabsList className="inline-flex h-10" style={{ minWidth: '100%' }}>
-                        {(showAllCategories ? categories : categories.slice(0, maxVisibleCategories)).map((category) => (
-                          <TabsTrigger 
-                            key={category.id} 
-                            value={category.id} 
-                            className="flex items-center gap-1"
-                          >
-                            {category.icon} {category.name}
-                          </TabsTrigger>
-                        ))}
-                        {categories.length > maxVisibleCategories && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            type="button"
-                            onClick={() => setShowAllCategories((v) => !v)}
-                            className="ml-2"
-                          >
-                            {showAllCategories
-                              ? "Show Less"
-                              : `+${categories.length - maxVisibleCategories} More`}
-                          </Button>
-                        )}
-                      </TabsList>
-                    </ScrollArea>
-                  </div>
-                </Tabs>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4" />
+                <span>{new Date().toLocaleTimeString()}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-                {/* Product Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {paginatedProducts.length === 0 ? (
-                    <div className="col-span-full text-center text-muted-foreground py-8">
-                      No products found.
+        <div className="md:col-span-1 lg:col-span-2">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                  <CardTitle>Products</CardTitle>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search products..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8 w-full"
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Dynamic Categories with Expandable Button */}
+                  <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+                    <div className="relative w-full">
+                      <ScrollArea className="w-full overflow-auto">
+                        <TabsList className="inline-flex h-10" style={{ minWidth: '100%' }}>
+                          {(showAllCategories ? categories : categories.slice(0, maxVisibleCategories)).map((category) => (
+                            <TabsTrigger
+                              key={category.id}
+                              value={category.id}
+                              className="flex items-center gap-1"
+                            >
+                              {category.icon} {category.name}
+                            </TabsTrigger>
+                          ))}
+                          {categories.length > maxVisibleCategories && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              type="button"
+                              onClick={() => setShowAllCategories((v) => !v)}
+                              className="ml-2"
+                            >
+                              {showAllCategories
+                                ? "Show Less"
+                                : `+${categories.length - maxVisibleCategories} More`}
+                            </Button>
+                          )}
+                        </TabsList>
+                      </ScrollArea>
                     </div>
-                  ) : (
-                    paginatedProducts.map((product) => (
-                      <Card
-                        key={product.id}
-                        className="overflow-hidden cursor-pointer hover:border-primary transition-colors hover:bg-accent"
-                        onClick={() => addToCart(product)}
-                      >
-                        <div className="aspect-square bg-muted flex items-center justify-center">
-                          <img src={product.image || "/placeholder.svg"} alt={product.name} className="object-cover" />
-                        </div>
-                        <CardContent className="p-3">
-                          <div className="text-sm font-medium">{product.name}</div>
-                          <div className="flex items-center justify-between mt-1">
-                            <div className="text-md text-muted-foreground">${product.price.toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">In stock: {product.stock}</div>
-                        </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-                {/* Pagination Controls */}
-                {totalPages > 1 && (
-                  <div className="flex justify-end items-center gap-2 mt-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label="Previous Page"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    {Array.from({ length: Math.min(totalPages, 5) }) .map((_, index) => {
-                      let pageNumber
-                      if (totalPages <= 5) {
-                        pageNumber = index + 1
-                      } else if (currentPage <= 3) {
-                        pageNumber = index + 1
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNumber = totalPages - 4 + index
-                      } else {
-                        pageNumber = currentPage - 2 + index
-                      }
+                  </Tabs>
 
-                      return(
-                        <Button
-                          key={index}
-                          variant={currentPage === pageNumber ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => paginate(pageNumber)}
-                        >
-                          {pageNumber}
-                        </Button>
-                      )
-                    })}
-                    <Button
-                      size="sm"
-                      aria-label="Next Page"
-                      variant="outline"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      
-      {/* Shopping Cart Area - Fixed Position */}
-      <div className="md:col-span-1 lg:col-span-1">
-        <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden">
-          <Card className="lg:fixed lg:top-16 lg:right-0 lg:h-[calc(100vh-4rem)] lg:w-[calc(100%/3)] flex flex-col overflow-hidden">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <CardTitle className="flex items-center">
-                <ShoppingCart className="mr-2 h-5 w-5" /> Cart
-                {cart.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
-                  </Badge>
-                )}
-              </CardTitle>
-              {!showCheckout && (
-                <div className="relative">
-                  <User className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Customer name (optional)"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-              )}
-            </CardHeader>
-
-            {!showCheckout ? (
-              <>
-                <div 
-                  ref={cartContainerRef}
-                  className="flex-grow overflow-y-auto scroll-bar-thin scrollbar-thumb-rounded scrollbar-thumb-muted "
-                  style={{ maxHeight: 'calc(100vh - 20rem)' }}
-                >
-                  <div className="p-4 pt-0">
-                    {cart.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-48 text-center">
-                        <ShoppingCart className="h-12 w-12 text-muted-foreground mb-3 opacity-20" />
-                        <p className="text-muted-foreground">Your cart is empty</p>
-                        <p className="text-xs text-muted-foreground mt-1">Add products to get started</p>
+                  {/* Product Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {paginatedProducts.length === 0 ? (
+                      <div className="col-span-full text-center text-muted-foreground py-8">
+                        No products found.
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        {cart.map((item) => (
-                          <div 
-                            key={item.id} 
-                            ref={itemRefs[item.id]}
-                            className="flex items-start py-2 border-b transition-colors duration-300 hover:bg-accent hover:border-primary"
-
-                          >
-                            <div className="flex-1 min-w-0 mr-4">
-                              <div className="font-medium mb-1 truncate">{item.name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                ${item.price.toFixed(2)} × {item.quantity}
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end space-y-2">
-                              <div className="font-medium">${(item.price * item.quantity).toFixed(2)}</div>
-                              <div className="flex items-center">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateQuantity(item.id, item.quantity - 1)
-                                  }}
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <span className="w-8 text-center">{item.quantity}</span>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateQuantity(item.id, item.quantity + 1)
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-red-500 ml-1"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    removeFromCart(item.id)
-                                  }}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
+                      paginatedProducts.map((product) => (
+                        <Card
+                          key={product.id}
+                          className="overflow-hidden cursor-pointer hover:border-primary transition-colors hover:bg-accent"
+                          onClick={() => addToCart(product)}
+                        >
+                          <div className="aspect-square bg-muted flex items-center justify-center">
+                            <img src={product.image || "/placeholder.svg"} alt={product.name} className="object-cover" />
                           </div>
-                        ))}
-                      </div>
+                          <CardContent className="p-3">
+                            <div className="text-sm font-medium">{product.name}</div>
+                            <div className="flex items-center justify-between mt-1">
+                              <div className="text-md text-muted-foreground">${product.price.toFixed(2)}</div>
+                              <div className="text-xs text-muted-foreground mt-1">In stock: {product.stock}</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
                     )}
                   </div>
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex justify-end items-center gap-2 mt-4">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label="Previous Page"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      {Array.from({ length: Math.min(totalPages, 5) }).map((_, index) => {
+                        let pageNumber
+                        if (totalPages <= 5) {
+                          pageNumber = index + 1
+                        } else if (currentPage <= 3) {
+                          pageNumber = index + 1
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + index
+                        } else {
+                          pageNumber = currentPage - 2 + index
+                        }
+
+                        return (
+                          <Button
+                            key={index}
+                            variant={currentPage === pageNumber ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => paginate(pageNumber)}
+                          >
+                            {pageNumber}
+                          </Button>
+                        )
+                      })}
+                      <Button
+                        size="sm"
+                        aria-label="Next Page"
+                        variant="outline"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-                {/* Discount Code Section */}
-                <CardContent className="border-t p-4 flex-shrink-0">
-                  <div className="flex gap-2 mb-4">
+        {/* Shopping Cart Area - Fixed Position */}
+        <div className="md:col-span-1 lg:col-span-1">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden">
+            <Card className="lg:fixed lg:top-16 lg:right-0 lg:h-[calc(100vh-4rem)] lg:w-[calc(100%/3)] flex flex-col overflow-hidden">
+              <CardHeader className="pb-3 flex-shrink-0">
+                <CardTitle className="flex items-center">
+                  <ShoppingCart className="mr-2 h-5 w-5" /> Cart
+                  {cart.length > 0 && (
+                    <Badge variant="secondary" className="ml-2">
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {!showCheckout && (
+                  <div className="relative">
+                    <User className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Discount code"
-                      value={discountCode}
-                      onChange={(e) => setDiscountCode(e.target.value)}
-                      className="flex-1"
+                      placeholder="Customer name (optional)"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="pl-8"
                     />
-                    <Button variant="outline" onClick={applyDiscount} disabled={!discountCode || cart.length === 0}>
-                      Apply
-                    </Button>
                   </div>
+                )}
+              </CardHeader>
 
-                  {/* Cart summary and actions */}
-                  <div className="space-y-1 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal</span>
-                      <span>${subtotal.toFixed(2)}</span>
-                    </div>
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600">
-                        <span>Discount</span>
-                        <span>-${discountAmount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Tax (8%)</span>
-                      <span>${tax.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium text-base pt-1">
-                      <span>Total</span>
-                      <span>${total.toFixed(2)}</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setCart([])}
-                      disabled={cart.length === 0}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> Clear
-                    </Button>
-                    <Button className="flex-1" onClick={() => setShowCheckout(true)} disabled={cart.length === 0}>
-                      <Receipt className="mr-2 h-4 w-4" /> Checkout
-                    </Button>
-                  </div>
-                </CardContent>
-              </>
-            ) : (
-              <>
-                <CardContent className="flex-grow flex flex-col">
-                  <div className="space-y-4 mb-4">
-                    <div>
-                      <h3 className="font-medium mb-2">Payment Method</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant={paymentMethod === "cash" ? "default" : "outline"}
-                          className={cn(
-                            "justify-start",
-                            paymentMethod === "cash" && "bg-primary text-primary-foreground hover:bg-primary/90",
-                          )}
-                          onClick={() => setPaymentMethod("cash")}
-                        >
-                          <Banknote className="mr-2 h-4 w-4" /> Cash
-                        </Button>
-                        <Button
-                          variant={paymentMethod === "card" ? "default" : "outline"}
-                          className={cn(
-                            "justify-start",
-                            paymentMethod === "card" && "bg-primary text-primary-foreground hover:bg-primary/90",
-                          )}
-                          onClick={() => setPaymentMethod("card")}
-                        >
-                          <CreditCard className="mr-2 h-4 w-4" /> Card
-                        </Button>
-                        <Button
-                          variant={paymentMethod === "wallet" ? "default" : "outline"}
-                          className={cn(
-                            "justify-start",
-                            paymentMethod === "wallet" && "bg-primary text-primary-foreground hover:bg-primary/90",
-                          )}
-                          onClick={() => setPaymentMethod("wallet")}
-                        >
-                          <Wallet className="mr-2 h-4 w-4" /> Digital Wallet
-                        </Button>
-                        <Button
-                          variant={paymentMethod === "split" ? "default" : "outline"}
-                          className={cn(
-                            "justify-start",
-                            paymentMethod === "split" && "bg-primary text-primary-foreground hover:bg-primary/90",
-                          )}
-                          onClick={() => setPaymentMethod("split")}
-                        >
-                          <CreditCard className="mr-2 h-4 w-4" /> Split Pay
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="border-t pt-4">
-                      <h3 className="font-medium mb-2">Order Summary</h3>
-                      <ScrollArea className="h-[140px] mb-2 -mx-1 px-1">
-                        <div className="space-y-2">
+              {!showCheckout ? (
+                <>
+                  <div
+                    ref={cartContainerRef}
+                    className="flex-grow overflow-y-auto scroll-bar-thin scrollbar-thumb-rounded scrollbar-thumb-muted "
+                    style={{ maxHeight: 'calc(100vh - 20rem)' }}
+                  >
+                    <div className="p-4 pt-0">
+                      {cart.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-center">
+                          <ShoppingCart className="h-12 w-12 text-muted-foreground mb-3 opacity-20" />
+                          <p className="text-muted-foreground">Your cart is empty</p>
+                          <p className="text-xs text-muted-foreground mt-1">Add products to get started</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
                           {cart.map((item) => (
-                            <div key={item.id} className="flex justify-between text-sm">
-                              <span>
-                                {item.quantity} × {item.name}
-                              </span>
-                              <span>${(item.price * item.quantity).toFixed(2)}</span>
+                            <div
+                              key={item.id}
+                              ref={itemRefs[item.id]}
+                              className="flex items-start py-2 border-b transition-colors duration-300 hover:bg-accent hover:border-primary"
+
+                            >
+                              <div className="flex-1 min-w-0 mr-4">
+                                <div className="font-medium mb-1 truncate">{item.name}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  ${item.price.toFixed(2)} × {item.quantity}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end space-y-2">
+                                <div className="font-medium">${(item.price * item.quantity).toFixed(2)}</div>
+                                <div className="flex items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      updateQuantity(item.id, item.quantity - 1)
+                                    }}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-8 text-center">{item.quantity}</span>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      updateQuantity(item.id, item.quantity + 1)
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-red-500 ml-1"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      removeFromCart(item.id)
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      </ScrollArea>
+                      )}
                     </div>
                   </div>
 
-                  <div className="border-t pt-4 mt-auto">
+                  {/* Discount Code Section */}
+                  <CardContent className="border-t p-4 flex-shrink-0">
+                    <div className="flex gap-2 mb-4">
+                      <Input
+                        placeholder="Discount code"
+                        value={discountCode}
+                        onChange={(e) => setDiscountCode(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button variant="outline" onClick={applyDiscount} disabled={!discountCode || cart.length === 0}>
+                        Apply
+                      </Button>
+                    </div>
+
+                    {/* Cart summary and actions */}
                     <div className="space-y-1 mb-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Subtotal</span>
@@ -877,38 +807,142 @@ export function SalesInterface() {
                         <span className="text-muted-foreground">Tax (8%)</span>
                         <span>${tax.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between font-medium text-lg pt-1">
+                      <div className="flex justify-between font-medium text-base pt-1">
                         <span>Total</span>
                         <span>${total.toFixed(2)}</span>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setCart([])}
+                        disabled={cart.length === 0}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Clear
+                      </Button>
+                      <Button className="flex-1" onClick={() => setShowCheckout(true)} disabled={cart.length === 0}>
+                        <Receipt className="mr-2 h-4 w-4" /> Checkout
+                      </Button>
+                    </div>
+                  </CardContent>
+                </>
+              ) : (
+                <>
+                  <CardContent className="flex-grow flex flex-col">
+                    <div className="space-y-4 mb-4">
+                      <div>
+                        <h3 className="font-medium mb-2">Payment Method</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant={paymentMethod === "cash" ? "default" : "outline"}
+                            className={cn(
+                              "justify-start",
+                              paymentMethod === "cash" && "bg-primary text-primary-foreground hover:bg-primary/90",
+                            )}
+                            onClick={() => setPaymentMethod("cash")}
+                          >
+                            <Banknote className="mr-2 h-4 w-4" /> Cash
+                          </Button>
+                          <Button
+                            variant={paymentMethod === "card" ? "default" : "outline"}
+                            className={cn(
+                              "justify-start",
+                              paymentMethod === "card" && "bg-primary text-primary-foreground hover:bg-primary/90",
+                            )}
+                            onClick={() => setPaymentMethod("card")}
+                          >
+                            <CreditCard className="mr-2 h-4 w-4" /> Card
+                          </Button>
+                          <Button
+                            variant={paymentMethod === "wallet" ? "default" : "outline"}
+                            className={cn(
+                              "justify-start",
+                              paymentMethod === "wallet" && "bg-primary text-primary-foreground hover:bg-primary/90",
+                            )}
+                            onClick={() => setPaymentMethod("wallet")}
+                          >
+                            <Wallet className="mr-2 h-4 w-4" /> Digital Wallet
+                          </Button>
+                          <Button
+                            variant={paymentMethod === "split" ? "default" : "outline"}
+                            className={cn(
+                              "justify-start",
+                              paymentMethod === "split" && "bg-primary text-primary-foreground hover:bg-primary/90",
+                            )}
+                            onClick={() => setPaymentMethod("split")}
+                          >
+                            <CreditCard className="mr-2 h-4 w-4" /> Split Pay
+                          </Button>
+                        </div>
+                      </div>
 
-                <CardContent className="border-t p-4 flex-shrink-0">
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setShowCheckout(false)}
-                      disabled={isProcessing}
-                    >
-                      <ChevronLeft className="mr-2 h-4 w-4" /> Back
-                    </Button>
-                    <Button className="flex-1" onClick={handleCheckout} disabled={isProcessing}>
-                      {isProcessing ? (
-                        <>Processing...</>
-                      ) : (
-                        <>
-                          <CreditCard className="mr-2 h-4 w-4" /> Pay ${total.toFixed(2)}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </>
-            )}
-          </Card>
+                      <div className="border-t pt-4">
+                        <h3 className="font-medium mb-2">Order Summary</h3>
+                        <ScrollArea className="h-[140px] mb-2 -mx-1 px-1">
+                          <div className="space-y-2">
+                            {cart.map((item) => (
+                              <div key={item.id} className="flex justify-between text-sm">
+                                <span>
+                                  {item.quantity} × {item.name}
+                                </span>
+                                <span>${(item.price * item.quantity).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4 mt-auto">
+                      <div className="space-y-1 mb-4">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span>${subtotal.toFixed(2)}</span>
+                        </div>
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between text-sm text-green-600">
+                            <span>Discount</span>
+                            <span>-${discountAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tax (8%)</span>
+                          <span>${tax.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-medium text-lg pt-1">
+                          <span>Total</span>
+                          <span>${total.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+
+                  <CardContent className="border-t p-4 flex-shrink-0">
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setShowCheckout(false)}
+                        disabled={isProcessing}
+                      >
+                        <ChevronLeft className="mr-2 h-4 w-4" /> Back
+                      </Button>
+                      <Button className="flex-1" onClick={handleCheckout} disabled={isProcessing}>
+                        {isProcessing ? (
+                          <>Processing...</>
+                        ) : (
+                          <>
+                            <CreditCard className="mr-2 h-4 w-4" /> Pay ${total.toFixed(2)}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
       {/* Receipt Modal - Add proper typing for receiptData */}
@@ -923,6 +957,8 @@ export function SalesInterface() {
               tax={receiptData.tax}
               total={receiptData.total}
               paymentMethod={receiptData.paymentMethod}
+              organizationName={receiptData.organizationName}
+              cashierName={receiptData.cashierName}
               onClose={closeReceiptAndReset}
             />
           </div>

@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useEffect, useState, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   ShoppingCart,
@@ -27,8 +26,9 @@ import {
   Calendar,
   Image,
 } from "lucide-react"
-import { useAuth } from "@/contexts/AuthContext"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 import type { JSX } from "react"
+import { usePathname, useRouter } from "next/navigation"
 
 // Size constraints for buttons
 const MIN_WIDTH = 157
@@ -59,9 +59,13 @@ interface ActionButton {
 
 export default function WelcomePage() {
   const router = useRouter()
-  const { user, logout, isLoading, isAuthenticated } = useAuth()
-  const userRole = user?.role
-  const userName = user?.name || "User"
+  const { user, store, signOut, isLoading, isAuthenticated } = useSupabaseAuth()
+  const pathname = usePathname()
+
+  const userRole = user?.user_metadata?.role || "guest"
+  const userName = user?.user_metadata?.name || "Guest"
+  const userEmail = user?.email || ""
+  const storeName = store?.name || "Store"
   const [isResizing, setIsResizing] = useState<string | null>(null)
   const [buttonSizes, setButtonSizes] = useState<Record<string, ButtonSize>>({})
   const [navigating, setNavigating] = useState(false)
@@ -610,7 +614,7 @@ export default function WelcomePage() {
     try {
       // Clear saved layouts
       localStorage.removeItem(BUTTON_LAYOUTS_KEY)
-      await logout()
+      await signOut()
       // Redirect to login
       router.replace("/auth")
     } catch (err) {

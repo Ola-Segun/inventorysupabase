@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+
+/**
+ * SIMPLE RLS FIX - No Recursion
+ * This creates the simplest possible RLS policies that avoid any circular references
+ */
+
+console.log('🎯 SIMPLE RLS FIX - NO RECURSION');
+console.log('=================================\n');
+
+console.log('📋 Use this ultra-simple approach that eliminates ALL recursion:\n');
+
+console.log('```sql');
+console.log('-- =====================================================');
+console.log('-- ULTRA-SIMPLE RLS POLICIES - NO RECURSION');
+console.log('-- =====================================================');
+console.log('');
+console.log('-- Step 1: Drop ALL existing policies');
+console.log('DROP POLICY IF EXISTS "organizations_select" ON organizations;');
+console.log('DROP POLICY IF EXISTS "organizations_all" ON organizations;');
+console.log('DROP POLICY IF EXISTS "stores_select" ON stores;');
+console.log('DROP POLICY IF EXISTS "stores_all" ON stores;');
+console.log('DROP POLICY IF EXISTS "users_select_own" ON users;');
+console.log('DROP POLICY IF EXISTS "users_select_org" ON users;');
+console.log('DROP POLICY IF EXISTS "users_update_own" ON users;');
+console.log('DROP POLICY IF EXISTS "users_admin_manage" ON users;');
+console.log('DROP POLICY IF EXISTS "store_invitations_select" ON store_invitations;');
+console.log('DROP POLICY IF EXISTS "store_invitations_all" ON store_invitations;');
+console.log('DROP POLICY IF EXISTS "categories_select" ON categories;');
+console.log('DROP POLICY IF EXISTS "categories_all" ON categories;');
+console.log('DROP POLICY IF EXISTS "products_select" ON products;');
+console.log('DROP POLICY IF EXISTS "products_all" ON products;');
+console.log('DROP POLICY IF EXISTS "orders_select" ON orders;');
+console.log('DROP POLICY IF EXISTS "orders_all" ON orders;');
+console.log('DROP POLICY IF EXISTS "audit_logs_select" ON audit_logs;');
+console.log('DROP POLICY IF EXISTS "audit_logs_insert" ON audit_logs;');
+console.log('');
+console.log('-- Drop any other policies');
+console.log('DROP POLICY IF EXISTS "Users can view their own organization" ON organizations;');
+console.log('DROP POLICY IF EXISTS "Super admins can manage all organizations" ON organizations;');
+console.log('DROP POLICY IF EXISTS "Users can view stores in their organization" ON stores;');
+console.log('DROP POLICY IF EXISTS "Store owners and admins can manage their stores" ON stores;');
+console.log('DROP POLICY IF EXISTS "Users can view users in their organization" ON users;');
+console.log('DROP POLICY IF EXISTS "Users can update their own profile" ON users;');
+console.log('DROP POLICY IF EXISTS "Admins can manage users in their organization" ON users;');
+console.log('DROP POLICY IF EXISTS "Users can view their own profile" ON users;');
+console.log('DROP POLICY IF EXISTS "Super admins can manage all users" ON users;');
+console.log('DROP POLICY IF EXISTS "Users can view invitations for their stores" ON store_invitations;');
+console.log('DROP POLICY IF EXISTS "Admins can manage invitations for their stores" ON store_invitations;');
+console.log('DROP POLICY IF EXISTS "Users can view categories in their organization" ON categories;');
+console.log('DROP POLICY IF EXISTS "Users can create categories" ON categories;');
+console.log('DROP POLICY IF EXISTS "Users can update categories" ON categories;');
+console.log('DROP POLICY IF EXISTS "Users can delete categories" ON categories;');
+console.log('DROP POLICY IF EXISTS "Users can view products in their organization" ON products;');
+console.log('DROP POLICY IF EXISTS "Users can create products" ON products;');
+console.log('DROP POLICY IF EXISTS "Users can update products" ON products;');
+console.log('DROP POLICY IF EXISTS "Users can delete products" ON products;');
+console.log('DROP POLICY IF EXISTS "Users can view orders in their organization" ON orders;');
+console.log('DROP POLICY IF EXISTS "Users can create orders" ON orders;');
+console.log('DROP POLICY IF EXISTS "Users can update orders" ON orders;');
+console.log('DROP POLICY IF EXISTS "Users can delete orders" ON orders;');
+console.log('DROP POLICY IF EXISTS "Users can view audit logs for their organization" ON audit_logs;');
+console.log('DROP POLICY IF EXISTS "System can insert audit logs" ON audit_logs;');
+console.log('');
+console.log('-- Step 2: Enable RLS on all tables');
+console.log('ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE stores ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE users ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE store_invitations ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE categories ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE products ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE customers ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE orders ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;');
+console.log('ALTER TABLE store_analytics ENABLE ROW LEVEL SECURITY;');
+console.log('');
+console.log('-- Step 3: Create ULTRA-SIMPLE policies (NO recursion)');
+console.log('');
+console.log('-- Users: Only allow users to see themselves (simplest possible)');
+console.log('CREATE POLICY "users_own" ON users');
+console.log('    FOR ALL USING (id = auth.uid());');
+console.log('');
+console.log('-- Organizations: Allow authenticated users to read');
+console.log('CREATE POLICY "organizations_read" ON organizations');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Stores: Allow authenticated users to read');
+console.log('CREATE POLICY "stores_read" ON stores');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Categories: Allow authenticated users to read');
+console.log('CREATE POLICY "categories_read" ON categories');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Products: Allow authenticated users to read');
+console.log('CREATE POLICY "products_read" ON products');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Orders: Allow authenticated users to read');
+console.log('CREATE POLICY "orders_read" ON orders');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Store Invitations: Allow authenticated users to read');
+console.log('CREATE POLICY "store_invitations_read" ON store_invitations');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Audit Logs: Allow authenticated users to read');
+console.log('CREATE POLICY "audit_logs_read" ON audit_logs');
+console.log('    FOR SELECT USING (auth.uid() IS NOT NULL);');
+console.log('');
+console.log('-- Allow inserts for audit logs (for logging system)');
+console.log('CREATE POLICY "audit_logs_insert" ON audit_logs');
+console.log('    FOR INSERT WITH CHECK (true);');
+console.log('');
+console.log('-- =====================================================');
+console.log('-- TEST THE FIX');
+console.log('-- =====================================================');
+console.log('');
+console.log('-- Test query (should work without recursion):');
+console.log('-- SELECT * FROM users WHERE id = auth.uid() LIMIT 1;');
+console.log('');
+console.log('-- =====================================================');
+console.log('-- COMPLETE');
+console.log('-- =====================================================');
+console.log('```');
+
+console.log('\n✅ Copy and paste this SQL into your Supabase SQL Editor');
+console.log('🎯 This approach:');
+console.log('   • Uses ONLY auth.uid() - no table references');
+console.log('   • No circular dependencies');
+console.log('   • Simplest possible policies');
+console.log('   • Guaranteed no infinite recursion');
+
+console.log('\n⚠️  SECURITY NOTE:');
+console.log('   These are basic policies for testing.');
+console.log('   For production, you\'ll want more restrictive policies.');
+
+console.log('\n🧪 Test with:');
+console.log('```sql');
+console.log('SELECT * FROM users WHERE id = auth.uid() LIMIT 1;');
+console.log('```');
+
+console.log('\n🚀 This will definitely fix the infinite recursion issue!');

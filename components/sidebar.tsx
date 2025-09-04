@@ -48,7 +48,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMobile } from "@/hooks/use-mobile"
 import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet"
-import { useAuth } from "@/contexts/AuthContext"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
+import { useToast } from "./ui/use-toast"
+
+import { hasPermission, type Permission } from "@/lib/permissions"
 
 interface SidebarProps {
   open?: boolean
@@ -66,9 +69,93 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
   const isMobile = useMobile()
   const [internalCollapsed, setInternalCollapsed] = useState(false)
   const [mobileIconsOnly, setMobileIconsOnly] = useState(false)
-  const { user } = useAuth()
+  const { user, userProfile, store, signOut } = useSupabaseAuth()
+  const { toast } = useToast()
 
-  // console.log("Sidebar user role:", user?.role)
+  // Get user role from multiple sources with fallbacks
+  const userProfileRole = userProfile?.role
+  const userRoleProp = user?.role
+  const userMetadataRole = user?.user_metadata?.role
+  const isStoreOwner = userProfile?.is_store_owner
+
+  // Priority: userProfile.role > JWT token role > user metadata role > default
+  const actualRole = userProfileRole || userRoleProp || userMetadataRole
+
+  console.log("🔍 DEBUG: User role determination:", {
+    userProfileRole,
+    userRoleProp,
+    userMetadataRole,
+    isStoreOwner,
+    actualRole
+  })
+
+  console.log('🔍 DEBUG: User object:', user)
+
+  // Determine effective role: store owners get admin, otherwise use assigned role
+  // If user is authenticated but no specific role found, check if they might be admin based on email or other indicators
+  let userRole = "guest"
+  if (user) {
+    if (actualRole) {
+      userRole = actualRole
+    } else if (isStoreOwner) {
+      userRole = "admin"
+    } else {
+      // Check if user might be admin based on email pattern or other indicators
+      const adminEmails = ['admin', 'olaniyanpaul012@gmail.com'] // Add known admin emails
+      const superAdminEmails = ['superadmin', 'olaniyanpaul012@gmail.com'] // Add known super admin emails
+
+      if (superAdminEmails.some(email => user.email?.includes(email))) {
+        userRole = "super_admin"
+      } else if (adminEmails.some(email => user.email?.includes(email))) {
+        userRole = "admin"
+      } else {
+        userRole = "seller" // Default for authenticated users
+      }
+    }
+  }
+
+  // If user profile is not loaded yet but we have a user, show loading state
+  if (user && !userProfile && userRole === "guest") {
+    userRole = "loading"
+  }
+
+  const userName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || "Guest"
+  const userEmail = user?.email || ""
+  const storeName = store?.name || "Store"
+
+  // Log role detection for debugging
+  if (user) {
+    console.log("🔍 DEBUG: User role detection:", {
+      userId: user.id,
+      userEmail: user.email,
+      userProfileRole,
+      userRoleProp,
+      userMetadataRole,
+      isStoreOwner,
+      actualRole,
+      finalUserRole: userRole,
+      userProfileLoaded: !!userProfile,
+      userProfileKeys: userProfile ? Object.keys(userProfile) : null,
+      userKeys: Object.keys(user),
+      userMetadataKeys: user.user_metadata ? Object.keys(user.user_metadata) : null
+    })
+  }
+
+
+  // Show loading state if user is not available yet
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-2 text-xs text-muted-foreground">Loading user data...</p>
+      </div>
+    )
+  }
+
+  // If user is available but profile is still loading, show basic navigation
+  if (!userProfile) {
+    console.log("User profile not loaded yet, showing basic navigation")
+  }
 
   // Get initial state from cookie if available
   useState(() => {
@@ -98,23 +185,18 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
   }, [open])
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
-  const [userRole, setUserRole] = useState<string>("manager") // Default role
 
   useEffect(() => {
-    // Get user role from localStorage
-    const storedRole = user?.role
-    if (storedRole) {
-      setUserRole(storedRole)
-    }
-
     // Expand the section that contains the current path
-    const pathSegments = pathname.split("/dashboard").filter(Boolean)
-    if (pathSegments.length > 0) {
-      const mainSection = pathSegments[0]
-      setExpandedGroups((prev) => ({
-        ...prev,
-        [mainSection]: true,
-      }))
+    if (pathname) {
+      const pathSegments = pathname.split("/dashboard").filter(Boolean)
+      if (pathSegments.length > 0) {
+        const mainSection = pathSegments[0]
+        setExpandedGroups((prev) => ({
+          ...prev,
+          [mainSection]: true,
+        }))
+      }
     }
   }, [pathname])
 
@@ -144,7 +226,7 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
             title: "Dashboard",
             href: "/dashboard",
             icon: <Home className="h-4 w-4" />,
-            roles: ["admin", "manager", "cashier", "seller"],
+            roles: ["admin", "manager", "cashier", "seller", "super_admin"],
           },
         ],
       },
@@ -338,7 +420,7 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
           title: "User Management",
           href: "/admin/users",
           icon: <UserCog className="h-4 w-4" />,
-          roles: ["admin"],
+          roles: ["admin", "super_admin"],
         },
         {
           title: "Seller Management",
@@ -385,7 +467,10 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
     // Combine all items and filter based on user role
     let allItems = [...commonItems]
 
-    if (userRole === "admin") {
+    if (userRole === "super_admin") {
+      // Super admin gets all access
+      allItems = [...allItems, inventoryItems, salesItems, restaurantItems, analyticsItems, adminItems, otherItems]
+    } else if (userRole === "admin") {
       allItems = [...allItems, inventoryItems, salesItems, restaurantItems, analyticsItems, adminItems, otherItems]
     } else if (userRole === "manager") {
       allItems = [...allItems, inventoryItems, salesItems, restaurantItems, analyticsItems, otherItems]
@@ -393,13 +478,31 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
       allItems = [...allItems, salesItems, restaurantItems, otherItems]
     } else if (userRole === "seller") {
       allItems = [...allItems, sellerItems, otherItems]
+    } else if (userRole === "loading") {
+      // Show loading state for navigation while user profile loads
+      console.log("User role still loading, showing basic navigation")
+      allItems = [...allItems, sellerItems, otherItems]
+    } else {
+      // Fallback for any unrecognized role - show basic seller access
+      console.warn("Unrecognized user role:", userRole, "- defaulting to seller access")
+      allItems = [...allItems, sellerItems, otherItems]
     }
 
-    // Filter items based on user role
+    // Filter items based on user role and permissions
     return allItems
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.roles.includes(userRole)),
+        items: group.items.filter((item) => {
+          // Check if user has the required role
+          if (item.roles && item.roles.includes(userRole)) {
+            return true
+          }
+          // For super_admin, also check if they have admin permissions
+          if (userRole === 'super_admin' && item.roles && item.roles.includes('admin')) {
+            return true
+          }
+          return false
+        }),
       }))
       .filter((group) => group.items.length > 0)
   }
@@ -424,9 +527,9 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
                           className={cn(pathname === item.href && "bg-muted", "h-9 w-9")}
                         >
                           {item.icon}
-                          {item.badge && (
+                          {(item as any).badge && (
                             <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                              {item.badge}
+                              {(item as any).badge}
                             </span>
                           )}
                         </Button>
@@ -475,9 +578,9 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
                     >
                       {item.icon}
                       <span>{item.title}</span>
-                      {item.badge && (
+                      {(item as any).badge && (
                         <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                          {item.badge}
+                          {(item as any).badge}
                         </span>
                       )}
                     </Button>
@@ -532,13 +635,14 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
           <HelpCircle className="mr-2 h-4 w-4" />
           Help & Support
         </Link>
-        <Link
-          href="/auth"
+        <Button
           className="flex w-full items-center rounded-md px-3 py-2 text-sm hover:bg-muted text-red-500 hover:text-red-500"
+          onClick={signOut}
+          variant="ghost"
         >
           <LogOut className="mr-2 h-4 w-4" />
           Logout
-        </Link>
+        </Button>
       </div>
     )
   }
@@ -606,9 +710,9 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
               const newWidth = startWidth + moveEvent.clientX - startX
 
               if (newWidth < 120) {
-                setOpen(false)
+                setOpen?.(false)
               } else {
-                setOpen(true)
+                setOpen?.(true)
               }
             }
 

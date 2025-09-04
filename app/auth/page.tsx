@@ -10,8 +10,7 @@ import { Package, Info, Loader } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-// import { useAuth } from "@/hooks/useAuth"
-import { useAuth } from "@/contexts/AuthContext"
+import { useAuth } from "@/hooks/useAuth"
 
 const EXAMPLE_ACCOUNTS = [
   { email: "admin@example.com", password: "password", role: "admin", label: "Admin Dashboard" },
@@ -40,7 +39,7 @@ export default function Auth() {
   const [error, setError] = useState("")
   const [showCredentials, setShowCredentials] = useState(false)
   const router = useRouter()
-  const { login, register,  user } = useAuth()
+  const { signIn, signUp, user } = useAuth()
   const { toast } = useToast()
 
   const [formData, setFormData] = useState<FormData>({
@@ -61,7 +60,7 @@ export default function Auth() {
     setLoading(true)
     setError("")
     try {
-      await login(email, password)
+      await signIn(email, password)
       toast({
         title: "Login Successful",
         description: "You are successfully logged in.",
@@ -86,7 +85,7 @@ export default function Auth() {
     try {
       const account = EXAMPLE_ACCOUNTS.find((acc) => acc.role === role)
       if (account) {
-        await login(account.email, account.password)
+        await signIn(account.email, account.password)
         toast({
           title: "Login Successful",
           description: `Logged in as ${role}.`,
@@ -113,7 +112,7 @@ export default function Auth() {
 
     if (isLogin) {
       try {
-        await login(formData.email, formData.password)
+        await signIn(formData.email, formData.password)
         toast({
         title: "Login Successful",
         description: "You are successfully logged in.",
@@ -138,12 +137,12 @@ export default function Auth() {
           setError("Passwords do not match.")
           return
         }
-        await register(
-          formData.name!,
-          formData.email,
-          formData.password,
-          formData.password_confirmation!
-        )
+        await signUp(formData.email, formData.password, {
+          name: formData.name!,
+          organizationName: "Default Organization",
+          organizationSlug: "default-org",
+          role: "admin"
+        })
         toast({
           title: "Registration Successful",
           description: "You are successfully registered.",

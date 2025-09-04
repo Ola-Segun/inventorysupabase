@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/AuthContext"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
+import { SetupGuard } from "@/components/setup-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -27,20 +28,14 @@ import { CalendarWidget } from "@/components/calendar-widget"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, isLoading, isAuthenticated } = useAuth()
+  const { user, isLoading, isAuthenticated } = useSupabaseAuth()
   const [activeTab, setActiveTab] = useState("overview")
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date(),
   })
 
-  useEffect(() => {
-    if (isLoading) return;
-
-    if (!isAuthenticated) {
-        router.push("/auth");
-    }
-  }, [isLoading, isAuthenticated, router]);
+  // Dashboard page - no redirect needed, user is already authenticated
 
   // Mock notifications data
   const notifications = [
@@ -75,9 +70,14 @@ export default function DashboardPage() {
     },
   ]
 
+  if (!isAuthenticated && !isLoading) {
+    return <div>Redirecting to login...</div>
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Dashboard" description="Welcome back to your inventory management system.">
+    <SetupGuard requireSetup={false}>
+      <div className="flex flex-col gap-6">
+      <PageHeader title="Dashboard" description={`Welcome back${user?.user_metadata?.name ? `, ${user.user_metadata.name}` : ''}! Here's your inventory management system.`}>
         <div className="flex items-center gap-2">
           <DateRangePicker
             date={dateRange}
@@ -510,5 +510,6 @@ export default function DashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </SetupGuard>
   )
 }

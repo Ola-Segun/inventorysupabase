@@ -1,1 +1,1 @@
-export { useAuth } from '@/contexts/AuthContext';
+export { useSupabaseAuth as useAuth } from '@/contexts/SupabaseAuthContext';

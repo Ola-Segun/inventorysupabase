@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@/hooks/useAuth"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 
 // LogoutButton component
 // This component handles user logout functionality
@@ -11,15 +11,17 @@ import { useAuth } from "@/hooks/useAuth"
 
 
 export function LogoutButton() {
-    const { logout } = useAuth()
+    const { signOut } = useSupabaseAuth()
     const router = useRouter()
 
     const handleLogout = async () => {
         try {
-            await logout()
-            router.push('/auth')
+            await signOut()
+            router.push('/login')
         } catch (err) {
             console.error("Logout error: ", err)
+            // Still redirect even if logout fails
+            router.push('/login')
         }
     }
 

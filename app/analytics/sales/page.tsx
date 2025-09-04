@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/date-range-picker"
 import { PageHeader } from "@/components/page-header"
-import { Download, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { Download, TrendingUp, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { SalesChart } from "@/components/sales-chart"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 import {
   Select,
   SelectContent,
@@ -19,16 +20,46 @@ import {
 } from "@/components/ui/select"
 
 export default function SalesAnalyticsPage() {
+  const { user } = useSupabaseAuth()
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date(),
   })
+  const [analytics, setAnalytics] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-      // Prevent automatic redirection
-      useEffect(() => {
-        // Store a flag in localStorage to indicate the welcome page has been shown
-        localStorage.setItem("SalesAnalyticsPageShown", "true")
-      }, [])
+  // Fetch analytics data
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true)
+      const startDate = dateRange.from.toISOString().split('T')[0]
+      const endDate = dateRange.to.toISOString().split('T')[0]
+
+      const response = await fetch(`/api/analytics/store?startDate=${startDate}&endDate=${endDate}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics')
+      }
+
+      const data = await response.json()
+      setAnalytics(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchAnalytics()
+    }
+  }, [user, dateRange])
+
+  // Calculate totals from analytics data
+  const totalSales = analytics.reduce((sum, day) => sum + (day.total_sales || 0), 0)
+  const totalOrders = analytics.reduce((sum, day) => sum + (day.total_orders || 0), 0)
+  const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,11 +86,19 @@ export default function SalesAnalyticsPage() {
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$45,231.89</div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-              <span className="text-green-500 font-medium">+20.1%</span> from last period
-            </p>
+            {loading ? (
+              <div className="flex items-center justify-center h-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">${totalSales.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                  <span className="text-green-500 font-medium">+20.1%</span> from last period
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -67,35 +106,61 @@ export default function SalesAnalyticsPage() {
             <CardTitle className="text-sm font-medium">Average Order Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$59.42</div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <ArrowUpRight className="mr-1 h-3 w-3 text-green-500" />
-              <span className="text-green-500 font-medium">+4.3%</span> from last period
-            </p>
+            {loading ? (
+              <div className="flex items-center justify-center h-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">${avgOrderValue.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                  <ArrowUpRight className="mr-1 h-3 w-3 text-green-500" />
+                  <span className="text-green-500 font-medium">+4.3%</span> from last period
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3.24%</div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <ArrowDownRight className="mr-1 h-3 w-3 text-red-500" />
-              <span className="text-red-500 font-medium">-0.8%</span> from last period
-            </p>
+            {loading ? (
+              <div className="flex items-center justify-center h-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{totalOrders}</div>
+                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                  <span className="text-green-500 font-medium">+12.5%</span> from last period
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Transactions</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,482</div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-              <span className="text-green-500 font-medium">+12.5%</span> from last period
-            </p>
+            {loading ? (
+              <div className="flex items-center justify-center h-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {analytics.length > 0 ? analytics[analytics.length - 1]?.total_customers || 0 : 0}
+                </div>
+                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                  <span className="text-green-500 font-medium">+8.4%</span> from last period
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

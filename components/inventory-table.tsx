@@ -5,7 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Edit, Trash2, Plus, ArrowUpDown, Download, RefreshCw, AlertTriangle } from "lucide-react"
+import { Search, Edit, Trash2, Plus, ArrowUpDown, Download, RefreshCw, AlertTriangle, Building2, Bell, TrendingUp } from "lucide-react"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 import {
   Dialog,
   DialogContent,
@@ -181,6 +182,7 @@ const inventoryData: InventoryItem[] = [
 
 export function InventoryTable() {
   const { toast } = useToast()
+  const { user, organization, store } = useSupabaseAuth()
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -190,6 +192,7 @@ export function InventoryTable() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
+  const [lowStockAlerts, setLowStockAlerts] = useState<InventoryItem[]>([])
 
   // Dialog states
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -295,6 +298,14 @@ export function InventoryTable() {
   const totalPages = Math.ceil(inventory.length / itemsPerPage)
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
+
+  // Check for low stock alerts
+  useEffect(() => {
+    const lowStockItems = inventory.filter(item =>
+      item.stockStatus === "low-stock" || item.stockStatus === "out-of-stock"
+    )
+    setLowStockAlerts(lowStockItems)
+  }, [inventory])
 
   // Add new item
   const handleAddItem = () => {
@@ -467,6 +478,63 @@ export function InventoryTable() {
 
   return (
     <div className="space-y-4">
+      {/* Organization Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-6 w-6 text-blue-600" />
+            <div>
+              <h3 className="font-semibold text-lg">{organization?.name || store?.name || "Inventory Management"}</h3>
+              <p className="text-sm text-muted-foreground">
+                {user?.user_metadata?.name || user?.email} • {inventory.length} items tracked
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              <TrendingUp className="h-3 w-3 mr-1" />
+              {inventory.filter(item => item.stockStatus === "in-stock").length} In Stock
+            </Badge>
+            {lowStockAlerts.length > 0 && (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {lowStockAlerts.length} Low Stock
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Low Stock Alerts */}
+      {lowStockAlerts.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Bell className="h-5 w-5 text-amber-600" />
+            <h4 className="font-medium text-amber-800 dark:text-amber-200">Low Stock Alerts</h4>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {lowStockAlerts.slice(0, 6).map((item) => (
+              <div key={item.id} className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded border">
+                <div>
+                  <p className="font-medium text-sm">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.quantity} {item.unit} remaining
+                  </p>
+                </div>
+                <Badge variant={item.stockStatus === "out-of-stock" ? "destructive" : "secondary"}>
+                  {item.stockStatus.replace("-", " ")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          {lowStockAlerts.length > 6 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              +{lowStockAlerts.length - 6} more items need attention
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -615,11 +683,32 @@ export function InventoryTable() {
                       <TableCell className="text-right">
                         {item.quantity} {item.unit}
                       </TableCell>
-                      <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: store?.currency || organization?.settings?.currency || 'USD'
+                        }).format(item.price)}
+                      </TableCell>
                       <TableCell>{item.supplier}</TableCell>
                       <TableCell>{getstockStatusBadge(item.stockStatus)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {item.stockStatus === "low-stock" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-600 hover:text-blue-700"
+                              onClick={() => {
+                                // Quick reorder action
+                                toast({
+                                  title: "Reorder Initiated",
+                                  description: `Reorder request sent for ${item.name}`,
+                                })
+                              }}
+                            >
+                              Reorder
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

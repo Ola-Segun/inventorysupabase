@@ -10,38 +10,38 @@ import { Toaster } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ImageGalleryProvider } from "@/contexts/image-gallery-context"
-import { useAuth } from "@/contexts/AuthContext"
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 
 // Define page access map outside the component
 const PAGE_ACCESS_MAP: Record<string, string[]> = {
-  "/admin/sellers": ["admin"],
-  "/admin/users": ["admin"],
-  "/admin/settings": ["admin"],
-  "/admin/messages": ["admin"],
-  "/user-activity": ["admin"],
-  
+  "/admin/sellers": ["admin", "super_admin"],
+  "/admin/users": ["admin", "super_admin"],
+  "/admin/settings": ["admin", "super_admin"],
+  "/admin/messages": ["admin", "super_admin"],
+  "/user-activity": ["admin", "super_admin"],
+
   // Manager routes
-  "/products": ["admin", "manager"],
-  "/categories": ["admin", "manager"],
-  "/inventory": ["admin", "manager"],
-  "/suppliers": ["admin", "manager"],
-  "/stock-transfer": ["admin", "manager"],
-  "/discounts": ["admin", "manager"],
-  "/reports": ["admin", "manager"],
-  "/image-gallery": ["admin", "manager"],
-  
+  "/products": ["admin", "super_admin", "manager"],
+  "/categories": ["admin", "super_admin", "manager"],
+  "/inventory": ["admin", "super_admin", "manager"],
+  "/suppliers": ["admin", "super_admin", "manager"],
+  "/stock-transfer": ["admin", "super_admin", "manager"],
+  "/discounts": ["admin", "super_admin", "manager"],
+  "/reports": ["admin", "super_admin", "manager"],
+  "/image-gallery": ["admin", "super_admin", "manager"],
+
   // Analytics routes
-  "/analytics/sales": ["admin", "manager"],
-  "/analytics/inventory": ["admin", "manager"],
-  "/analytics/financial": ["admin", "manager"],
-  
+  "/analytics/sales": ["admin", "super_admin", "manager"],
+  "/analytics/inventory": ["admin", "super_admin", "manager"],
+  "/analytics/financial": ["admin", "super_admin", "manager"],
+
   // Cashier routes
-  "/customers": ["admin", "manager", "cashier"],
-  "/tables": ["admin", "manager", "cashier"],
-  "/menu": ["admin", "manager", "cashier"],
-  "/orders": ["admin", "manager", "cashier"],
-  "/invoices": ["admin", "manager", "cashier"],
-  
+  "/customers": ["admin", "super_admin", "manager", "cashier"],
+  "/tables": ["admin", "super_admin", "manager", "cashier"],
+  "/menu": ["admin", "super_admin", "manager", "cashier"],
+  "/orders": ["admin", "super_admin", "manager", "cashier"],
+  "/invoices": ["admin", "super_admin", "manager", "cashier"],
+
   // Seller routes
   "/seller": ["seller"],
   "/seller/history": ["seller"],
@@ -49,13 +49,13 @@ const PAGE_ACCESS_MAP: Record<string, string[]> = {
   "/seller/messages": ["seller"],
   "/seller/profile": ["seller"],
   "/seller/reports": ["seller"],
-  
+
   // Common routes
-  "/dashboard": ["admin", "manager", "cashier", "seller"],
-  "/sales": ["admin", "manager", "cashier", 'seller'],
-  "/settings": ["admin", "manager", "cashier", "seller"],
-  "/notifications": ["admin", "manager", "cashier", "seller"],
-  "/help": ["admin", "manager", "cashier", "seller"],
+  "/dashboard": ["admin", "super_admin", "manager", "cashier", "seller"],
+  "/sales": ["admin", "super_admin", "manager", "cashier", 'seller'],
+  "/settings": ["admin", "super_admin", "manager", "cashier", "seller"],
+  "/notifications": ["admin", "super_admin", "manager", "cashier", "seller"],
+  "/help": ["admin", "super_admin", "manager", "cashier", "seller"],
 }
 
 export default function ClientLayout({
@@ -69,11 +69,42 @@ export default function ClientLayout({
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth()
-  const userRole = user?.role
+  const [authTimeout, setAuthTimeout] = useState(false)
+  const { user, userProfile, isLoading: authLoading, isAuthenticated } = useSupabaseAuth()
+
+  // Get user role from multiple sources with fallbacks (consistent with sidebar and header)
+  const userProfileRole = userProfile?.role
+  const userRoleProp = user?.role
+  const userMetadataRole = user?.user_metadata?.role
+  const isStoreOwner = userProfile?.is_store_owner
+
+  // Priority: userProfile.role > JWT token role > user metadata role > default
+  const actualRole = userProfileRole || userRoleProp || userMetadataRole
+
+  // Determine effective role
+  let userRole = "guest"
+  if (user) {
+    if (actualRole) {
+      userRole = actualRole
+    } else if (isStoreOwner) {
+      userRole = "admin"
+    } else {
+      // Check if user might be admin based on email pattern
+      const adminEmails = ['admin', 'olaniyanpaul012@gmail.com']
+      const superAdminEmails = ['superadmin', 'olaniyanpaul012@gmail.com']
+
+      if (superAdminEmails.some(email => user.email?.includes(email))) {
+        userRole = "super_admin"
+      } else if (adminEmails.some(email => user.email?.includes(email))) {
+        userRole = "admin"
+      } else {
+        userRole = "seller"
+      }
+    }
+  }
 
   // Define what pages are public and don't require layout
-  const publicPages = ['/', '/auth', '/welcome']
+  const publicPages = ['/', '/auth', '/welcome', '/signup', '/setup', '/login', '/auth/confirm-email']
   const isPublicPage = pathname ? publicPages.includes(pathname) : false
 
 
@@ -95,28 +126,42 @@ export default function ClientLayout({
     setSidebarOpen(false)
   }, [pathname])
 
-  // Keep session alive with periodic ping
+  // Keep session alive with periodic ping (Supabase handles this automatically)
   useEffect(() => {
     // Only start pinging if authenticated and not on public pages
     if (!isAuthenticated || isPublicPage) return;
 
-    console.log('🔄 Starting session keep-alive ping...');
     const interval = setInterval(() => {
-      fetch('http://localhost:8000/api/ping', {
-        method: 'GET',
-        credentials: 'include',
-      }).then(() => {
-        console.log('✅ Session ping successful');
-      }).catch((error) => {
-        console.error('❌ Session ping failed:', error);
+      // Simple ping to keep session alive - just check if user is still valid
+      fetch('/api/auth/login', {
+        method: 'HEAD', // Use HEAD request for lighter ping
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {
+        // Ignore ping errors - just keeping session alive
       });
     }, 5 * 60 * 1000); // every 5 minutes
 
-    return () => {
-      console.log('🛑 Stopping session keep-alive ping');
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [isAuthenticated, isPublicPage]);
+
+  // Handle authentication redirect
+  useEffect(() => {
+    if (!isAuthenticated && !isPublicPage && !authLoading && pathname !== '/login') {
+      router.push('/login')
+    }
+  }, [isAuthenticated, isPublicPage, authLoading, pathname, router])
+
+  // Fallback: if auth loading takes too long, assume not authenticated
+  useEffect(() => {
+    if (authLoading && !isPublicPage) {
+      const fallbackTimer = setTimeout(() => {
+        console.warn('Auth loading timeout - assuming not authenticated')
+        setAuthTimeout(true)
+      }, 15000) // 15 second fallback
+
+      return () => clearTimeout(fallbackTimer)
+    }
+  }, [authLoading, isPublicPage])
 
   // Prevent hydration errors by not rendering layout-specific content during SSR or loading
   if (!mounted) {
@@ -124,7 +169,8 @@ export default function ClientLayout({
   }
 
   // Show loading if auth is still loading and we're not on a public page
-  if (authLoading && !isPublicPage) {
+  // Add a timeout to prevent infinite loading
+  if ((authLoading && !authTimeout) && !isPublicPage) {
     return (
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
         <div className="flex items-center justify-center min-h-screen">
@@ -135,6 +181,11 @@ export default function ClientLayout({
         </div>
       </ThemeProvider>
     )
+  }
+
+  // If not authenticated and not on a public page, show nothing (redirect handled by useEffect)
+  if (!isAuthenticated && !isPublicPage && !authLoading && pathname !== '/login') {
+    return null
   }
 
   // Apply theme provider to all pages
