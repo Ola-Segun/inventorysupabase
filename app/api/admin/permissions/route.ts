@@ -10,7 +10,19 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get('X-User-ID')
-    const userRole = request.headers.get('X-User-Role')
+    let userRole = request.headers.get('X-User-Role')
+
+    if (!userId || !userRole) {
+      try {
+        const { getServerUserFromRequest } = await import('@/lib/auth/server-session')
+        const fallback = await getServerUserFromRequest(request)
+        if (fallback) {
+          if (!userRole) userRole = fallback.role
+        }
+      } catch (err) {
+        console.error('Admin/permissions route: server-session fallback failed', err)
+      }
+    }
 
     if (!userId || !userRole) {
       return NextResponse.json(

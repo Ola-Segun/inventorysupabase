@@ -139,6 +139,7 @@ export default function Auth() {
         }
         await signUp(formData.email, formData.password, {
           name: formData.name!,
+          storeName: "Default Store",
           organizationName: "Default Organization",
           organizationSlug: "default-org",
           role: "admin"

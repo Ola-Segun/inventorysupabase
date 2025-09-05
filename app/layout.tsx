@@ -2,8 +2,6 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Montserrat, Open_Sans } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { SupabaseAuthProvider } from "@/contexts/SupabaseAuthContext"
 import { Toaster } from "sonner"
 
 const montserrat = Montserrat({
@@ -67,51 +65,91 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               // Remove browser extension attributes that cause hydration mismatches
-              function removeExtensionAttributes() {
-                const elements = document.querySelectorAll('[bis_skin_checked]');
-                elements.forEach(el => el.removeAttribute('bis_skin_checked'));
-              }
-
-              // Remove attributes immediately and also after DOM changes
-              removeExtensionAttributes();
-
-              // Watch for DOM changes and clean up extension attributes
-              const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                  if (mutation.type === 'attributes' && mutation.attributeName === 'bis_skin_checked') {
-                    mutation.target.removeAttribute('bis_skin_checked');
-                  }
-                });
-              });
-
-              observer.observe(document.body, {
-                attributes: true,
-                subtree: true,
-                attributeFilter: ['bis_skin_checked']
-              });
-
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js')
-                    .then(function(registration) {
-                      console.log('SW registered: ', registration);
-                    })
-                    .catch(function(registrationError) {
-                      console.log('SW registration failed: ', registrationError);
+              (function () {
+                function removeExtensionAttributes() {
+                  try {
+                    const elements = document.querySelectorAll('[bis_skin_checked]');
+                    elements.forEach(el => {
+                      if (el && typeof el.removeAttribute === 'function') {
+                        el.removeAttribute('bis_skin_checked');
+                      }
                     });
-                });
-              }
+                  } catch (e) {
+                    // defensive: if DOM isn't ready or selector fails, ignore
+                    console.warn('removeExtensionAttributes failed', e);
+                  }
+                }
+
+                // Remove attributes immediately if possible
+                if (typeof document !== 'undefined') {
+                  removeExtensionAttributes();
+                }
+
+                // Setup observer safely when body is available
+                function setupObserver() {
+                  try {
+                    const observer = new MutationObserver(function(mutations) {
+                      mutations.forEach(function(mutation) {
+                        try {
+                          if (mutation.type === 'attributes' && mutation.attributeName === 'bis_skin_checked') {
+                            const target = mutation.target;
+                            if (target && target.nodeType === Node.ELEMENT_NODE && typeof (target).removeAttribute === 'function') {
+                              (target).removeAttribute('bis_skin_checked');
+                            }
+                          }
+                        } catch (innerErr) {
+                          // swallow per-mutation errors
+                          console.warn('mutation handling failed', innerErr);
+                        }
+                      });
+                    });
+
+                    if (document.body) {
+                      observer.observe(document.body, {
+                        attributes: true,
+                        subtree: true,
+                        attributeFilter: ['bis_skin_checked']
+                      });
+                    } else {
+                      document.addEventListener('DOMContentLoaded', function () {
+                        if (document.body) {
+                          observer.observe(document.body, {
+                            attributes: true,
+                            subtree: true,
+                            attributeFilter: ['bis_skin_checked']
+                          });
+                        }
+                      }, { once: true });
+                    }
+                  } catch (e) {
+                    // If MutationObserver isn't available or observing fails, don't crash the app
+                    console.warn('MutationObserver setup failed', e);
+                  }
+                }
+
+                if (typeof window !== 'undefined') {
+                  setupObserver();
+                }
+
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js')
+                      .then(function(registration) {
+                        console.log('SW registered: ', registration);
+                      })
+                      .catch(function(registrationError) {
+                        console.log('SW registration failed: ', registrationError);
+                      });
+                  });
+                }
+              })();
             `,
           }}
         />
       </head>
       <body className="font-sans" suppressHydrationWarning={true}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <SupabaseAuthProvider>
-            <ClientLayout>{children}</ClientLayout>
-          </SupabaseAuthProvider>
-          <Toaster />
-        </ThemeProvider>
+        <ClientLayout>{children}</ClientLayout>
+        <Toaster />
       </body>
     </html>
   )

@@ -42,6 +42,46 @@ export async function POST(request: NextRequest) {
       maxAge: 0
     })
 
+    // Clear client-visible auth cookies too
+    response.cookies.set('sb-auth-token', '', {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0
+    })
+
+    response.cookies.set('sb-auth-state', '', {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0
+    })
+
+    // Also clear project-scoped Supabase auth cookie if it exists
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      let projectRef = null
+      try {
+        const u = new URL(supabaseUrl)
+        projectRef = u.hostname.split('.')[0]
+      } catch (e) {
+        projectRef = process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF || null
+      }
+
+      if (projectRef) {
+        const projectCookieName = `sb-${projectRef}-auth-token`
+        response.cookies.set(projectCookieName, '', {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 0
+        })
+        console.log('Logout API: cleared project-scoped cookie:', projectCookieName)
+      }
+    } catch (e) {
+      console.warn('Logout API: failed to clear project-scoped cookie', e)
+    }
+
     return response
   } catch (error) {
     console.error('Logout API error:', error)

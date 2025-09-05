@@ -253,7 +253,7 @@ export function AdminUserManagement() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('/api/admin/users')
+  const response = await fetch('/api/admin/users', { credentials: 'include' })
       const data = await response.json()
 
       if (!response.ok) {
@@ -291,7 +291,7 @@ export function AdminUserManagement() {
     try {
       setActivityLogsLoading(true)
 
-      const response = await fetch('/api/admin/activity-logs?limit=50')
+  const response = await fetch('/api/admin/activity-logs?limit=50', { credentials: 'include' })
       const data = await response.json()
 
       if (!response.ok) {
@@ -323,7 +323,7 @@ export function AdminUserManagement() {
     try {
       setActiveUsersLoading(true)
 
-      const response = await fetch('/api/admin/active-users')
+  const response = await fetch('/api/admin/active-users', { credentials: 'include' })
       const data = await response.json()
 
       if (!response.ok) {
@@ -354,7 +354,7 @@ export function AdminUserManagement() {
     try {
       setPermissionsLoading(true)
 
-      const response = await fetch('/api/admin/permissions')
+  const response = await fetch('/api/admin/permissions', { credentials: 'include' })
       const data = await response.json()
 
       if (!response.ok) {
@@ -378,8 +378,9 @@ export function AdminUserManagement() {
   // Function to update role permissions
   const updateRolePermissions = async (role: string, permissionUpdates: any) => {
     try {
-      const response = await fetch('/api/admin/permissions', {
+  const response = await fetch('/api/admin/permissions', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -445,8 +446,9 @@ export function AdminUserManagement() {
     }
 
     try {
-      const response = await fetch('/api/admin/users/invite', {
+  const response = await fetch('/api/admin/users/invite', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -494,8 +496,9 @@ export function AdminUserManagement() {
     }
 
     try {
-      const response = await fetch('/api/admin/users', {
+  const response = await fetch('/api/admin/users', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -526,9 +529,10 @@ export function AdminUserManagement() {
             const blob = await response.blob()
             formData.append('avatar', blob, 'avatar.jpg')
 
-            await fetch('/api/admin/users/upload-avatar', {
-              method: 'POST',
-              body: formData
+      await fetch('/api/admin/users/upload-avatar', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
             })
           }
         } catch (avatarError) {
@@ -566,6 +570,7 @@ export function AdminUserManagement() {
     try {
       const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -611,6 +616,7 @@ export function AdminUserManagement() {
     try {
       const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
         method: 'DELETE',
+        credentials: 'include'
       })
 
       if (!response.ok) {
@@ -638,8 +644,9 @@ export function AdminUserManagement() {
     }
 
     try {
-      const response = await fetch('/api/admin/users/bulk', {
+  const response = await fetch('/api/admin/users/bulk', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -674,8 +681,9 @@ export function AdminUserManagement() {
     }
 
     try {
-      const response = await fetch('/api/admin/users/bulk', {
+  const response = await fetch('/api/admin/users/bulk', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -706,8 +714,9 @@ export function AdminUserManagement() {
     if (!selectedUserIds.length) return
 
     try {
-      const response = await fetch('/api/admin/users/bulk', {
+  const response = await fetch('/api/admin/users/bulk', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -738,8 +747,9 @@ export function AdminUserManagement() {
     if (!selectedUserIds.length) return
 
     try {
-      const response = await fetch('/api/admin/users/bulk', {
+  const response = await fetch('/api/admin/users/bulk', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -776,8 +786,9 @@ export function AdminUserManagement() {
     }
 
     try {
-      const response = await fetch('/api/admin/users/reset-password', {
+  const response = await fetch('/api/admin/users/reset-password', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -820,7 +831,7 @@ export function AdminUserManagement() {
         params.append('role', roleFilter)
       }
 
-      const response = await fetch(`/api/admin/users/export?${params.toString()}`)
+  const response = await fetch(`/api/admin/users/export?${params.toString()}`, { credentials: 'include' })
 
       if (!response.ok) {
         const data = await response.json()
@@ -1298,9 +1309,10 @@ export function AdminUserManagement() {
 
                               formData.append('avatar', blob, 'avatar.jpg')
 
-                              const response = await fetch('/api/admin/users/upload-avatar', {
-                                method: 'POST',
-                                body: formData
+                          const response = await fetch('/api/admin/users/upload-avatar', {
+                                    method: 'POST',
+                                    body: formData,
+                                    credentials: 'include'
                               })
 
                               const data = await response.json()

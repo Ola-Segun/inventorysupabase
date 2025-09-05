@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { csrfProtection } from '@/lib/auth/csrf'
+import { rateLimitService } from '@/lib/auth/rate-limit'
 
-// Create a Supabase client for middleware
+// Create a Supabase client for middleware (using service role for server-side operations)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
 // Define route protection rules
@@ -102,102 +104,102 @@ const rolePermissions = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  console.log('🔒 Middleware: Processing request for', pathname)
+  console.log('🔒 Middleware: Processing request for', pathname, 'at', new Date().toISOString())
 
-  // Skip middleware for static files, API routes, and Next.js internals
+  // Skip middleware for static files and Next.js internals
   if (
     pathname.startsWith('/_next/') ||
-    pathname.startsWith('/api/') ||
     pathname.includes('.') ||
     pathname.startsWith('/favicon.ico')
   ) {
     return NextResponse.next()
   }
 
-  // Get session from cookies
-  const accessToken = request.cookies.get('sb-access-token')?.value
-  const refreshToken = request.cookies.get('sb-refresh-token')?.value
+  // Handle API routes - apply security but skip auth checks (handled by API routes themselves)
+  if (pathname.startsWith('/api/')) {
+    // Apply rate limiting for API routes
+    const rateLimitResult = await rateLimitService.checkRateLimit(
+      request,
+      {
+        windowMs: 60 * 1000, // 1 minute
+        maxRequests: 100, // 100 requests per minute
+        skipSuccessfulRequests: false,
+        skipFailedRequests: false
+      },
+      'api'
+    )
 
-  console.log('🔒 Middleware: Tokens present:', { accessToken: !!accessToken, refreshToken: !!refreshToken })
+    if (!rateLimitResult.allowed && rateLimitResult.response) {
+      return rateLimitResult.response
+    }
 
-  let user = null
-  let userProfile = null
+    // Apply CSRF protection for state-changing API routes
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+      const csrfCheck = csrfProtection.middleware(request)
+      if (csrfCheck) {
+        return csrfCheck
+      }
+    }
 
-  // Verify session if tokens exist
-  if (accessToken) {
-    try {
-      console.log('🔒 Middleware: Verifying session with server-side client...')
+    // For API routes, add security headers and return
+      const response = NextResponse.next()
+      response.headers.set('X-Frame-Options', 'DENY')
+      response.headers.set('X-Content-Type-Options', 'nosniff')
 
-      // Create server-side Supabase client for session verification
-      const serverSupabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
+      // Attempt to attach authenticated user context for API routes so
+      // downstream API handlers (server routes) can read X-User-ID / X-User-Role
+      // NOTE: skip enriching the auth routes themselves
+      try {
+        if (!pathname.startsWith('/api/auth')) {
+          const accessToken = request.cookies.get('sb-access-token')?.value
 
-      // Verify the JWT token directly
-      const { data: { user: sessionUser }, error } = await serverSupabase.auth.getUser(accessToken)
+          if (accessToken) {
+            // Verify token and load lightweight profile
+            const { data: userData, error: userError } = await supabase.auth.getUser(accessToken)
 
-      if (!error && sessionUser) {
-        user = sessionUser
-        console.log('🔒 Middleware: Session verified for user:', sessionUser.id)
+            if (!userError && userData?.user) {
+              const user = userData.user
 
-        // Get user profile
-        try {
-          const { data: profile, error: profileError } = await serverSupabase
-            .from('users')
-            .select('*, store:stores(*)')
-            .eq('id', sessionUser.id)
-            .single()
+              // Query minimal profile fields only
+              const { data: profile } = await supabase
+                .from('users')
+                .select('id, role, organization_id, store_id')
+                .eq('id', user.id)
+                .single()
 
-          if (!profileError && profile) {
-            userProfile = profile
-            console.log('🔒 Middleware: User profile loaded:', { role: profile.role, status: profile.status })
-          } else {
-            // If profile query fails, create a basic profile from auth data
-            console.warn('🔒 Middleware: Profile query failed, using basic auth profile:', profileError?.message)
-            userProfile = {
-              id: sessionUser.id,
-              email: sessionUser.email || '',
-              name: sessionUser.user_metadata?.name || '',
-              role: 'seller',
-              status: 'active',
-              organization_id: null,
-              store_id: null,
-              is_store_owner: false,
-              permissions: []
+              if (profile) {
+                response.headers.set('X-User-ID', user.id)
+                response.headers.set('X-User-Role', profile.role)
+                response.headers.set('X-Organization-ID', profile.organization_id || '')
+                response.headers.set('X-Store-ID', profile.store_id || '')
+              }
             }
           }
-        } catch (error) {
-          console.warn('🔒 Middleware: Profile query error, using fallback:', error)
-          // Create fallback profile
-          userProfile = {
-            id: sessionUser.id,
-            email: sessionUser.email || '',
-            name: sessionUser.user_metadata?.name || '',
-            role: 'seller',
-            status: 'active',
-            organization_id: null,
-            store_id: null,
-            is_store_owner: false,
-            permissions: []
-          }
         }
-      } else {
-        console.log('🔒 Middleware: Session verification failed:', error?.message)
+      } catch (err) {
+        // Do not fail the request if header enrichment fails
+        console.error('Middleware: failed to enrich API request with user headers', err)
       }
-    } catch (error) {
-      console.error('🔒 Middleware: Session verification error:', error)
-    }
-  } else {
-    console.log('🔒 Middleware: No access token found')
+
+      return response
   }
+
+  // For page routes, check if user has valid session via cookies
+  const hasAuthCookie = request.cookies.get('sb-auth-state')?.value === 'authenticated'
+  const hasAccessToken = !!request.cookies.get('sb-access-token')?.value
+
+  console.log('🔒 Middleware: Page route auth check:', {
+    pathname,
+    hasAuthCookie,
+    hasAccessToken
+  })
 
   // Check if route is public
   const isPublicRoute = routeRules.public.some(route =>
     pathname === route || pathname.startsWith(route + '/')
   )
 
-  console.log('🔒 Middleware: Route analysis:', { pathname, isPublicRoute, hasUser: !!user, hasProfile: !!userProfile })
+  console.log('🔒 Middleware: Route analysis:', { pathname, isPublicRoute, hasAuthCookie, hasAccessToken })
 
   // If route is public, allow access
   if (isPublicRoute) {
@@ -205,60 +207,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // If no user session and route is not public, redirect to login
-  if (!user) {
-    console.log('🔒 Middleware: No user session, redirecting to login')
+  // For protected routes, check if user has auth cookies
+  if (!hasAuthCookie || !hasAccessToken) {
+    console.log('🔒 Middleware: No auth cookies found, redirecting to login')
+
     const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
+    loginUrl.searchParams.set('from', pathname)
+
+    console.log('🔒 Middleware: Redirecting to:', loginUrl.toString())
     return NextResponse.redirect(loginUrl)
   }
 
-  // If user profile not found, redirect to login
-  if (!userProfile) {
-    console.log('🔒 Middleware: No user profile, redirecting to login')
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // Check if user account is active
-  if (userProfile.status !== 'active') {
-    console.log('🔒 Middleware: User account not active, redirecting to login')
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('error', 'account_inactive')
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // Check role-based access
-  const userRole = userProfile.role
-  const allowedRoutes = rolePermissions[userRole as keyof typeof rolePermissions] || []
-
-  console.log('🔒 Middleware: Access check:', { userRole, allowedRoutes, pathname })
-
-  // Super admin has access to everything
-  if (userRole === 'super_admin') {
-    console.log('🔒 Middleware: Super admin access granted')
-    return NextResponse.next()
-  }
-
-  // Check if user has permission for this route
-  const hasAccess = allowedRoutes.some(route =>
-    pathname === route ||
-    pathname.startsWith(route + '/') ||
-    route === '*' ||
-    pathname.startsWith('/api/') // Allow API access for now (will be checked by RLS)
-  )
-
-  console.log('🔒 Middleware: Access result:', { hasAccess })
-
-  if (!hasAccess) {
-    console.log('🔒 Middleware: Access denied, redirecting to dashboard')
-    // Redirect to dashboard or show unauthorized page
-    const dashboardUrl = new URL('/dashboard', request.url)
-    dashboardUrl.searchParams.set('error', 'unauthorized')
-    return NextResponse.redirect(dashboardUrl)
-  }
-
-  console.log('🔒 Middleware: Access granted, proceeding')
+  console.log('🔒 Middleware: Auth cookies present, allowing access')
 
   // Add security headers
   const response = NextResponse.next()
@@ -268,14 +228,6 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-
-  // Add user context to headers for API routes
-  if (pathname.startsWith('/api/')) {
-    response.headers.set('X-User-ID', user.id)
-    response.headers.set('X-User-Role', userRole)
-    response.headers.set('X-Organization-ID', userProfile.organization_id || '')
-    response.headers.set('X-Store-ID', userProfile.store_id || '')
-  }
 
   return response
 }

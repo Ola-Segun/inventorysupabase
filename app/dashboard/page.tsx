@@ -70,8 +70,23 @@ export default function DashboardPage() {
     },
   ]
 
+  console.log("📊 DashboardPage: Render check:", {
+    isAuthenticated,
+    isLoading,
+    hasUser: !!user,
+    userId: user?.id,
+    timestamp: new Date().toISOString()
+  })
+
   if (!isAuthenticated && !isLoading) {
+    console.log("📊 DashboardPage: Not authenticated and not loading, showing redirect message")
     return <div>Redirecting to login...</div>
+  }
+
+  if (isLoading) {
+    console.log("📊 DashboardPage: Still loading, showing loading state")
+  } else {
+    console.log("📊 DashboardPage: Loading complete, rendering dashboard")
   }
 
   return (

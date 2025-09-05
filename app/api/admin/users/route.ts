@@ -11,7 +11,20 @@ export async function GET(request: NextRequest) {
   try {
     // Get current user from headers (set by middleware)
     const userId = request.headers.get('X-User-ID')
-    const userRole = request.headers.get('X-User-Role')
+    let userRole = request.headers.get('X-User-Role')
+
+    // Fallback: attempt to derive user from sb-access-token cookie if headers missing
+    if (!userId || !userRole) {
+      try {
+        const { getServerUserFromRequest } = await import('@/lib/auth/server-session')
+        const fallback = await getServerUserFromRequest(request)
+        if (fallback) {
+          if (!userRole) userRole = fallback.role
+        }
+      } catch (err) {
+        console.error('Admin/users route: server-session fallback failed', err)
+      }
+    }
 
     if (!userId || !userRole) {
       return NextResponse.json(

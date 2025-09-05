@@ -10,7 +10,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ImageGalleryProvider } from "@/contexts/image-gallery-context"
-import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
+import { useSupabaseAuth, SupabaseAuthProvider } from "@/contexts/SupabaseAuthContext"
 
 // Define page access map outside the component
 const PAGE_ACCESS_MAP: Record<string, string[]> = {
@@ -58,7 +58,76 @@ const PAGE_ACCESS_MAP: Record<string, string[]> = {
   "/help": ["admin", "super_admin", "manager", "cashier", "seller"],
 }
 
-export default function ClientLayout({
+function AuthenticatedLayout({
+  children,
+  pathname,
+  isPublicPage,
+  authLoading,
+  authTimeout,
+  isAuthenticated,
+  sidebarOpen,
+  setSidebarOpen,
+  sidebarCollapsed,
+  setSidebarCollapsed,
+  loading,
+}: {
+  children: React.ReactNode
+  pathname: string | null
+  isPublicPage: boolean
+  authLoading: boolean
+  authTimeout: boolean
+  isAuthenticated: boolean
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (collapsed: boolean) => void
+  loading: boolean
+}) {
+  // Apply theme provider to all pages
+  return (
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <ImageGalleryProvider>
+        {isPublicPage ? (
+          // For public pages without layout (landing, login, welcome)
+          <>
+            {children}
+            <Toaster />
+          </>
+        ) : (
+          // For authenticated pages with layout
+          <div className="flex h-screen overflow-hidden">
+            <Sidebar
+              open={sidebarOpen}
+              setOpen={setSidebarOpen}
+              collapsed={sidebarCollapsed}
+              setCollapsed={setSidebarCollapsed}
+            />
+            <div
+              className={cn(
+                "flex flex-col flex-1 w-full transition-all duration-300 ease-in-out",
+                sidebarCollapsed ? "md:ml-16" : "md:ml-16"
+              )}
+            >
+              <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+              <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 md:p-6">
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <LoadingSpinner size="lg" />
+                  </div>
+                ) : (
+                  children
+                )}
+              </main>
+            </div>
+            <Toaster />
+          </div>
+        )}
+      </ImageGalleryProvider>
+    </ThemeProvider>
+  )
+}
+
+function AuthWrapper({
   children,
 }: {
   children: React.ReactNode
@@ -132,9 +201,10 @@ export default function ClientLayout({
     if (!isAuthenticated || isPublicPage) return;
 
     const interval = setInterval(() => {
-      // Simple ping to keep session alive - just check if user is still valid
-      fetch('/api/auth/login', {
-        method: 'HEAD', // Use HEAD request for lighter ping
+      // Safe ping to server to keep cookies/session refreshed. Use the session endpoint
+      fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       }).catch(() => {
         // Ignore ping errors - just keeping session alive
@@ -144,12 +214,49 @@ export default function ClientLayout({
     return () => clearInterval(interval);
   }, [isAuthenticated, isPublicPage]);
 
-  // Handle authentication redirect
+  // Handle authentication redirect - prevent race conditions
   useEffect(() => {
-    if (!isAuthenticated && !isPublicPage && !authLoading && pathname !== '/login') {
-      router.push('/login')
+    console.log("🔄 ClientLayout: Auth redirect check:", {
+      isAuthenticated,
+      isPublicPage,
+      authLoading,
+      pathname,
+      userId: user?.id,
+      timestamp: new Date().toISOString()
+    });
+
+    // Detect Supabase auth cookies (these may be set by the server during login)
+    const hasAuthCookies = typeof document !== 'undefined' && (
+      document.cookie.includes('sb-auth-state=authenticated') ||
+      document.cookie.includes('sb-access-token=') ||
+      document.cookie.includes('sb-refresh-token=')
+    );
+
+    // Only redirect to login if there are no auth cookies (prevents race after login)
+    if (!isAuthenticated && !isPublicPage && !authLoading && !hasAuthCookies && pathname !== '/login') {
+      console.log("🔄 ClientLayout: Redirecting to login");
+      const t = setTimeout(() => router.replace('/login'), 150)
+      return () => clearTimeout(t)
     }
-  }, [isAuthenticated, isPublicPage, authLoading, pathname, router])
+
+    // Redirect authenticated users away from public pages
+    if (isAuthenticated && isPublicPage && !authLoading) {
+      const redirectTo = '/dashboard'
+      console.log("🔄 ClientLayout: Redirecting authenticated user from public page to:", redirectTo)
+
+      // Small delay to ensure state is stable, then hard redirect
+      setTimeout(() => {
+        try {
+          console.log("🔄 ClientLayout: Executing hard redirect to:", redirectTo)
+          window.location.href = redirectTo
+        } catch (error) {
+          console.error("🔄 ClientLayout: Error during redirect:", error)
+        }
+      }, 100)
+    } else {
+      console.log("🔄 ClientLayout: No redirect needed - conditions not met")
+    }
+  }, [isAuthenticated, isPublicPage, authLoading, pathname, router, user])
 
   // Fallback: if auth loading takes too long, assume not authenticated
   useEffect(() => {
@@ -225,9 +332,21 @@ export default function ClientLayout({
               </main>
             </div>
             <Toaster />
-          </div> 
+          </div>
         )}
       </ImageGalleryProvider>
     </ThemeProvider>
+  )
+}
+
+export default function ClientLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <SupabaseAuthProvider>
+      <AuthWrapper>{children}</AuthWrapper>
+    </SupabaseAuthProvider>
   )
 }

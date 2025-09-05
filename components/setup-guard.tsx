@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
 import { Loader2 } from "lucide-react"
@@ -14,8 +14,16 @@ export function SetupGuard({ children, requireSetup = true }: SetupGuardProps) {
   const { user, store, isLoading } = useSupabaseAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+
+  // track mount so the initial client render matches server HTML and
+  // redirect logic only runs after hydration to avoid mismatches
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
+    if (!mounted) return
     if (isLoading) return
 
     if (!user) {
@@ -33,7 +41,13 @@ export function SetupGuard({ children, requireSetup = true }: SetupGuardProps) {
       router.push('/dashboard')
       return
     }
-  }, [user, store, isLoading, router, requireSetup, pathname])
+  }, [mounted, user, store, isLoading, router, requireSetup, pathname])
+
+  // Until mounted, render the same children as the server to avoid
+  // hydration mismatches. Once mounted, show the loading state if needed.
+  if (!mounted) {
+    return <>{children}</>
+  }
 
   if (isLoading) {
     return (

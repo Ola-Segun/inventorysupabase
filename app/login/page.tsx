@@ -8,18 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Info, AlertCircle } from "lucide-react"
+import { Package, AlertCircle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext"
+import { getCSRFToken } from "@/lib/auth/csrf"
 
-const EXAMPLE_ACCOUNTS = [
-  { email: "admin@example.com", password: "password", role: "admin" },
-  { email: "manager@example.com", password: "password", role: "manager" },
-  { email: "cashier@example.com", password: "password", role: "cashier" },
-  { email: "seller@example.com", password: "password", role: "seller" },
-]
+// Example accounts removed for security - use environment variables or database for demo accounts
 
 export default function LoginPage() {
   const router = useRouter()
@@ -32,33 +28,68 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [resetError, setResetError] = useState("")
-  const [showCredentials, setShowCredentials] = useState(false)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [emailNotConfirmed, setEmailNotConfirmed] = useState(false)
   const [unconfirmedEmail, setUnconfirmedEmail] = useState("")
   const { toast } = useToast()
 
-  // Redirect logic is now handled by SupabaseAuthContext
-  // This prevents conflicts between multiple redirect mechanisms
+  // Redirect logic moved to client-layout.tsx to prevent race conditions
+  // This page no longer handles redirects directly
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
-    try {
-      await signIn(email, password)
+    console.log("🔑 LoginPage: Starting login process for email:", email)
 
+    try {
+      console.log("🔑 LoginPage: Getting CSRF token...")
+
+      // Get CSRF token with error handling
+      let csrfToken = null
+      try {
+        csrfToken = await getCSRFToken()
+        console.log("🔑 LoginPage: CSRF token obtained")
+      } catch (csrfError) {
+        console.warn("🔑 LoginPage: Failed to get CSRF token, proceeding without:", csrfError)
+        // Continue without CSRF token for now to test login
+      }
+
+  console.log("🔑 LoginPage: Calling auth context signIn...")
+
+  // Use the Supabase auth context signIn helper which calls the server
+  // login API and ensures the Supabase client session is set.
+  await signIn(email, password)
+
+  console.log("🔑 LoginPage: signIn completed successfully")
+
+      // Get the redirect URL from the query parameters
+      const params = new URLSearchParams(window.location.search);
+      const from = params.get('from');
+
+      console.log("🔑 LoginPage: Extracted redirect params:", { from })
+
+      // Clear any error params from the URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      // Show success message
       toast({
         title: "Login Successful",
         description: "You are successfully logged in.",
         variant: "default",
       })
 
-      // Redirect will be handled automatically by the useEffect when user state updates
-    } catch (err: any) {
+      console.log("🔑 LoginPage: Login successful, navigating to dashboard via router")
 
+      // Navigate client-side to preserve auth state and avoid reload races
+      setTimeout(() => {
+        router.replace('/dashboard')
+      }, 300)
+    } catch (err: any) {
+      console.log("🔑 LoginPage: Login failed with error:", err.message)
       // Check if it's an email confirmation error
-      if (err.message?.includes('Email not confirmed')) {
+      if (err.message?.includes('Email not confirmed') || err.message?.includes('email_not_confirmed')) {
         setEmailNotConfirmed(true)
         setUnconfirmedEmail(email)
         setError("Email not confirmed. Please check your email and click the confirmation link, or resend the confirmation email.")
@@ -76,37 +107,12 @@ export default function LoginPage() {
         })
       }
     } finally {
+      console.log("🔑 LoginPage: Setting loading to false")
       setLoading(false)
     }
   }
 
-  const handleQuickAccess = async (role: string) => {
-    setLoading(true)
-    setError("")
-    try {
-      const account = EXAMPLE_ACCOUNTS.find((acc) => acc.role === role)
-      if (account) {
-        await signIn(account.email, account.password)
-
-        toast({
-          title: "Login Successful",
-          description: `Logged in as ${role}.`,
-          variant: "default",
-        })
-
-        // Redirect will be handled automatically by the useEffect when user state updates
-      }
-    } catch (err: any) {
-      setError(err.message || "Quick access login failed.")
-      toast({
-        title: "Login Failed",
-        description: err.message || "Quick access login failed.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Quick access functionality removed for security reasons
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,7 +120,23 @@ export default function LoginPage() {
     setResetError("")
 
     try {
-      await resetPassword(resetEmail)
+      // Get CSRF token
+      const csrfToken = await getCSRFToken()
+
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        body: JSON.stringify({ email: resetEmail }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send reset email')
+      }
 
       toast({
         title: "Reset Email Sent",
@@ -147,9 +169,8 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-1">
               <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="quick">Quick Access</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4 mt-4">
@@ -242,48 +263,7 @@ export default function LoginPage() {
                   {loading ? "Logging in..." : "Login"}
                 </Button>
 
-                <div className="mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full flex items-center justify-center"
-                    onClick={() => setShowCredentials(!showCredentials)}
-                  >
-                    <Info className="h-4 w-4 mr-2" />
-                    {showCredentials ? "Hide Example Credentials" : "Show Example Credentials"}
-                  </Button>
-
-                  {showCredentials && (
-                    <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm">
-                      <p className="font-medium mb-1">Example Accounts:</p>
-                      <ul className="space-y-1">
-                        {EXAMPLE_ACCOUNTS.map((account) => (
-                          <li key={account.email}>
-                            <strong>{account.role}:</strong> {account.email} / {account.password}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
               </form>
-            </TabsContent>
-            <TabsContent value="quick" className="space-y-4 mt-4">
-              <div className="grid gap-4">
-                <Button onClick={() => handleQuickAccess("admin")} className="w-full" disabled={loading}>
-                  {loading ? "Please wait..." : "Admin Dashboard"}
-                </Button>
-                <Button onClick={() => handleQuickAccess("manager")} className="w-full" disabled={loading}>
-                  {loading ? "Please wait..." : "Manager Dashboard"}
-                </Button>
-                <Button onClick={() => handleQuickAccess("cashier")} className="w-full" disabled={loading}>
-                  {loading ? "Please wait..." : "Cashier Interface"}
-                </Button>
-                <Button onClick={() => handleQuickAccess("seller")} className="w-full" disabled={loading}>
-                  {loading ? "Please wait..." : "Seller Dashboard"}
-                </Button>
-              </div>
             </TabsContent>
           </Tabs>
 

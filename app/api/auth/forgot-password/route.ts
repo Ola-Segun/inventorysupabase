@@ -3,10 +3,17 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { emailService } from '@/lib/email-service'
 import crypto from 'crypto'
+import { csrfProtection } from '@/lib/auth/csrf'
 
 // POST /api/auth/forgot-password - Request password reset
 export async function POST(request: NextRequest) {
   try {
+    // Validate CSRF token
+    const csrfCheck = csrfProtection.middleware(request)
+    if (csrfCheck) {
+      return csrfCheck
+    }
+
     const supabase = createRouteHandlerClient({ cookies })
     const { email } = await request.json()
 
