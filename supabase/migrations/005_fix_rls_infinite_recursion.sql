@@ -53,11 +53,7 @@ CREATE POLICY "organizations_service_role" ON organizations
 -- Organizations: Simple policy - users can only see their own organization
 CREATE POLICY "organizations_simple" ON organizations
     FOR ALL USING (
-        id IN (
-            SELECT organization_id
-            FROM users
-            WHERE id = auth.uid()
-        )
+    id = get_user_org_safe(auth.uid())
     );
 
 -- Stores: Allow service role full access (for API operations)
@@ -67,11 +63,7 @@ CREATE POLICY "stores_service_role" ON stores
 -- Stores: Users can see stores they're associated with
 CREATE POLICY "stores_simple" ON stores
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id
-            FROM users
-            WHERE id = auth.uid()
-        ) OR
+    organization_id = get_user_org_safe(auth.uid()) OR
         owner_id = auth.uid()
     );
 
@@ -85,11 +77,7 @@ CREATE POLICY "users_self" ON users
 
 CREATE POLICY "users_org_read" ON users
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id
-            FROM users
-            WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "users_self_update" ON users
@@ -97,65 +85,46 @@ CREATE POLICY "users_self_update" ON users
 
 CREATE POLICY "users_admin_manage" ON users
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid() AND
-                  u.organization_id = users.organization_id AND
-                  u.role IN ('admin', 'super_admin') AND
-                  u.status = 'active'
-        )
+    (get_user_role_safe(auth.uid()) IN ('admin','super_admin')
+     AND get_user_org_safe(auth.uid()) = users.organization_id
+     AND get_user_status_safe(auth.uid()) = 'active')
     );
 
 -- Store invitations: Simple ownership-based access
 CREATE POLICY "store_invitations_simple" ON store_invitations
     FOR ALL USING (
-        store_id IN (
-            SELECT id FROM stores WHERE owner_id = auth.uid()
-        ) OR
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
-        )
+    store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()) OR
+    (get_user_role_safe(auth.uid()) IN ('admin','super_admin'))
     );
 
 -- Categories: Organization-based access
 CREATE POLICY "categories_simple" ON categories
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Products: Organization-based access
 CREATE POLICY "products_simple" ON products
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Suppliers: Organization-based access
 CREATE POLICY "suppliers_simple" ON suppliers
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Customers: Organization-based access
 CREATE POLICY "customers_simple" ON customers
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Orders: Organization-based access
 CREATE POLICY "orders_simple" ON orders
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Order items: Inherit from orders
@@ -163,26 +132,20 @@ CREATE POLICY "order_items_simple" ON order_items
     FOR ALL USING (
         order_id IN (
             SELECT id FROM orders
-            WHERE organization_id IN (
-                SELECT organization_id FROM users WHERE id = auth.uid()
-            )
+            WHERE organization_id = get_user_org_safe(auth.uid())
         )
     );
 
 -- Stock movements: Organization-based access
 CREATE POLICY "stock_movements_simple" ON stock_movements
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Audit logs: Organization-based access
 CREATE POLICY "audit_logs_simple" ON audit_logs
     FOR ALL USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Audit logs insert: Allow system to insert
@@ -194,9 +157,7 @@ CREATE POLICY "store_analytics_simple" ON store_analytics
     FOR ALL USING (
         store_id IN (
             SELECT id FROM stores
-            WHERE organization_id IN (
-                SELECT organization_id FROM users WHERE id = auth.uid()
-            ) OR
+            WHERE organization_id = get_user_org_safe(auth.uid()) OR
             owner_id = auth.uid()
         )
     );
@@ -223,18 +184,8 @@ ALTER TABLE store_analytics ENABLE ROW LEVEL SECURITY;
 -- STEP 5: Create helper functions to avoid recursion
 -- =====================================================
 
--- Function to get user's organization ID (cached to avoid repeated queries)
-CREATE OR REPLACE FUNCTION get_user_org_id(user_uuid UUID)
-RETURNS UUID AS $$
-    SELECT organization_id FROM users WHERE id = user_uuid;
-$$ LANGUAGE SQL SECURITY DEFINER STABLE;
-
--- Function to check if user is admin/super_admin
-CREATE OR REPLACE FUNCTION is_user_admin(user_uuid UUID)
-RETURNS BOOLEAN AS $$
-    SELECT role IN ('admin', 'super_admin') AND status = 'active'
-    FROM users WHERE id = user_uuid;
-$$ LANGUAGE SQL SECURITY DEFINER STABLE;
+-- Note: Using centralized helper functions defined in earlier migration
+-- get_user_org_safe, get_user_role_safe, get_user_status_safe
 
 -- =====================================================
 -- STEP 6: Test the policies

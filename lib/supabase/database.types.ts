@@ -95,39 +95,63 @@ export interface Database {
           updated_at?: string
         }
       }
-      store_invitations: {
+      user_invitations: {
         Row: {
           id: string
-          store_id: string
           email: string
-          role: 'admin' | 'manager' | 'cashier' | 'seller'
+          name: string | null
+          role: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
+          store_id: string | null
+          organization_id: string | null
           invited_by: string
-          token: string
+          invitation_token: string
+          status: 'pending' | 'accepted' | 'expired' | 'cancelled'
+          message: string | null
           expires_at: string
           accepted_at: string | null
+          accepted_by: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          store_id: string
           email: string
-          role?: 'admin' | 'manager' | 'cashier' | 'seller'
+          name?: string | null
+          role?: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
+          store_id?: string | null
+          organization_id?: string | null
           invited_by: string
-          token: string
+          invitation_token: string
+          status?: 'pending' | 'accepted' | 'expired' | 'cancelled'
+          message?: string | null
           expires_at: string
           accepted_at?: string | null
+          accepted_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          store_id?: string
           email?: string
-          role?: 'admin' | 'manager' | 'cashier' | 'seller'
+          name?: string | null
+          role?: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
+          store_id?: string | null
+          organization_id?: string | null
           invited_by?: string
-          token?: string
+          invitation_token?: string
+          status?: 'pending' | 'accepted' | 'expired' | 'cancelled'
+          message?: string | null
           expires_at?: string
           accepted_at?: string | null
+          accepted_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       store_analytics: {
@@ -181,7 +205,7 @@ export interface Database {
           store_id: string | null
           email: string
           name: string
-          role: 'admin' | 'manager' | 'cashier' | 'seller'
+          role: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
           avatar_url: string | null
           status: 'active' | 'inactive' | 'suspended'
           last_login_at: string | null
@@ -191,35 +215,35 @@ export interface Database {
           updated_at: string
         }
         Insert: {
-          id?: string
-          organization_id?: string | null
-          store_id?: string | null
-          email: string
-          name: string
-          role: 'admin' | 'manager' | 'cashier' | 'seller'
-          avatar_url?: string | null
-          status?: 'active' | 'inactive' | 'suspended'
-          last_login_at?: string | null
-          is_store_owner?: boolean | null
-          permissions?: string[] | null
-          created_at?: string
-          updated_at?: string
-        }
+           id?: string
+           organization_id?: string | null
+           store_id?: string | null
+           email: string
+           name: string
+           role?: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
+           avatar_url?: string | null
+           status?: 'active' | 'inactive' | 'suspended'
+           last_login_at?: string | null
+           is_store_owner?: boolean | null
+           permissions?: string[] | null
+           created_at?: string
+           updated_at?: string
+         }
         Update: {
-          id?: string
-          organization_id?: string | null
-          store_id?: string | null
-          email?: string
-          name?: string
-          role?: 'admin' | 'manager' | 'cashier' | 'seller'
-          avatar_url?: string | null
-          status?: 'active' | 'inactive' | 'suspended'
-          last_login_at?: string | null
-          is_store_owner?: boolean | null
-          permissions?: string[] | null
-          created_at?: string
-          updated_at?: string
-        }
+           id?: string
+           organization_id?: string | null
+           store_id?: string | null
+           email?: string
+           name?: string
+           role?: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
+           avatar_url?: string | null
+           status?: 'active' | 'inactive' | 'suspended'
+           last_login_at?: string | null
+           is_store_owner?: boolean | null
+           permissions?: string[] | null
+           created_at?: string
+           updated_at?: string
+         }
       }
       categories: {
         Row: {
@@ -615,6 +639,7 @@ export interface Database {
       stock_movement_type: 'in' | 'out' | 'adjustment' | 'transfer'
       store_type: 'retail_store' | 'warehouse' | 'distribution_center' | 'pop_up_store'
       store_status: 'active' | 'inactive' | 'pending_approval' | 'suspended'
+      invitation_status: 'pending' | 'accepted' | 'expired' | 'cancelled'
     }
     CompositeTypes: {
       [_ in never]: never

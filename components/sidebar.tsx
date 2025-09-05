@@ -79,14 +79,21 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
   const isStoreOwner = userProfile?.is_store_owner
 
   // Priority: userProfile.role > JWT token role > user metadata role > default
-  const actualRole = userProfileRole || userRoleProp || userMetadataRole
+  // But prioritize super_admin from metadata if available
+  let actualRole = userProfileRole || userRoleProp || userMetadataRole
+
+  // Special case: if metadata shows super_admin, always use that (overrides fallback profile)
+  if (userMetadataRole === 'super_admin') {
+    actualRole = 'super_admin'
+  }
 
   console.log("🔍 DEBUG: User role determination:", {
     userProfileRole,
     userRoleProp,
     userMetadataRole,
     isStoreOwner,
-    actualRole
+    actualRole,
+    profileLoaded: !!userProfile
   })
 
   console.log('🔍 DEBUG: User object:', user)
@@ -423,22 +430,16 @@ export function Sidebar({ open, setOpen, collapsed = false, setCollapsed }: Side
           roles: ["admin", "super_admin"],
         },
         {
-          title: "Seller Management",
-          href: "/admin/sellers",
-          icon: <Users className="h-4 w-4" />,
-          roles: ["admin"],
-        },
-        {
-          title: "System Settings",
+          title: "Organization Settings",
           href: "/admin/settings",
           icon: <Settings className="h-4 w-4" />,
-          roles: ["admin"],
+          roles: ["admin", "super_admin"],
         },
         {
           title: "Messages",
           href: "/admin/messages",
           icon: <MessageSquare className="h-4 w-4" />,
-          roles: ["admin"],
+          roles: ["admin", "super_admin"],
           badge: "2",
         },
       ],

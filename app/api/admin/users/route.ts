@@ -84,8 +84,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('status', status)
     }
 
-    // For non-super admins, only show users from their organization
-    if (userRole === 'admin') {
+    // For admins and super admins, only show users from their organization
+    if (userRole === 'admin' || userRole === 'super_admin') {
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
@@ -94,6 +94,10 @@ export async function GET(request: NextRequest) {
 
       if (userProfile?.organization_id) {
         query = query.eq('organization_id', userProfile.organization_id)
+        // Additionally, prevent super admins from seeing other super admins
+        if (userRole === 'super_admin') {
+          query = query.neq('role', 'super_admin')
+        }
       }
     }
 
@@ -124,7 +128,7 @@ export async function GET(request: NextRequest) {
       countQuery = countQuery.eq('status', status)
     }
 
-    if (userRole === 'admin') {
+    if (userRole === 'admin' || userRole === 'super_admin') {
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
@@ -133,6 +137,10 @@ export async function GET(request: NextRequest) {
 
       if (userProfile?.organization_id) {
         countQuery = countQuery.eq('organization_id', userProfile.organization_id)
+        // Additionally, prevent super admins from seeing other super admins
+        if (userRole === 'super_admin') {
+          countQuery = countQuery.neq('role', 'super_admin')
+        }
       }
     }
 
@@ -204,9 +212,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get current user's organization if not super admin
+    // Get current user's organization for both admin and super admin
     let targetOrganizationId = organizationId
-    if (userRole === 'admin' && !targetOrganizationId) {
+    if ((userRole === 'admin' || userRole === 'super_admin') && !targetOrganizationId) {
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
@@ -214,6 +222,14 @@ export async function POST(request: NextRequest) {
         .single()
 
       targetOrganizationId = userProfile?.organization_id
+    }
+
+    // Prevent super admins from creating other super admins
+    if (userRole === 'super_admin' && role === 'super_admin') {
+      return NextResponse.json(
+        { error: 'Super admins cannot create other super admins' },
+        { status: 403 }
+      )
     }
 
     // Create user profile

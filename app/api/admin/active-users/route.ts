@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current user's organization for filtering
-    let organizationFilter = ''
-    if (userRole === 'admin') {
+    let userOrganizationId = null
+    if (userRole === 'super_admin' || userRole === 'admin') {
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (userProfile?.organization_id) {
-        organizationFilter = `organization_id.eq.${userProfile.organization_id}`
+        userOrganizationId = userProfile.organization_id
       }
     }
 
@@ -58,8 +58,8 @@ export async function GET(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'active')
 
-    if (organizationFilter) {
-      activeUsersQuery = activeUsersQuery.eq('organization_id', organizationFilter.split('.')[1])
+    if (userOrganizationId) {
+      activeUsersQuery = activeUsersQuery.eq('organization_id', userOrganizationId)
     }
 
     const { count: activeUsers, error: activeError } = await activeUsersQuery
@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
       .from('users')
       .select('id', { count: 'exact', head: true })
 
-    if (organizationFilter) {
-      totalUsersQuery = totalUsersQuery.eq('organization_id', organizationFilter.split('.')[1])
+    if (userOrganizationId) {
+      totalUsersQuery = totalUsersQuery.eq('organization_id', userOrganizationId)
     }
 
     const { count: totalUsers, error: totalError } = await totalUsersQuery
@@ -97,8 +97,8 @@ export async function GET(request: NextRequest) {
       .select('role')
       .eq('status', 'active')
 
-    if (organizationFilter) {
-      roleStatsQuery = roleStatsQuery.eq('organization_id', organizationFilter.split('.')[1])
+    if (userOrganizationId) {
+      roleStatsQuery = roleStatsQuery.eq('organization_id', userOrganizationId)
     }
 
     const { data: roleData, error: roleError } = await roleStatsQuery
@@ -127,8 +127,8 @@ export async function GET(request: NextRequest) {
       .eq('status', 'active')
       .gte('last_login_at', yesterday.toISOString())
 
-    if (organizationFilter) {
-      recentLoginsQuery = recentLoginsQuery.eq('organization_id', organizationFilter.split('.')[1])
+    if (userOrganizationId) {
+      recentLoginsQuery = recentLoginsQuery.eq('organization_id', userOrganizationId)
     }
 
     const { count: recentLogins, error: recentError } = await recentLoginsQuery

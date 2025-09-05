@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
+import { emailService } from '@/lib/email-service'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,10 +83,11 @@ export async function POST(request: NextRequest) {
 
     // Check if invitation already exists and is still valid
     const { data: existingInvitation } = await supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .select('id, expires_at')
       .eq('email', email)
       .eq('store_id', storeId)
+      .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
       .single()
 
@@ -99,21 +101,30 @@ export async function POST(request: NextRequest) {
     // Generate invitation token
     const invitationToken = randomBytes(32).toString('hex')
 
+    // Get user's organization
+    const { data: userOrg } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+
     // Create invitation
     const { data: invitation, error: invitationError } = await supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .insert({
         store_id: storeId,
+        organization_id: userOrg?.organization_id,
         email,
         role,
         invited_by: user.id,
-        token: invitationToken,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+        invitation_token: invitationToken,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+        status: 'pending'
       })
       .select(`
         *,
         store:stores(name),
-        invited_by_user:users!store_invitations_invited_by_fkey(name)
+        invited_by_user:users!user_invitations_invited_by_fkey(name)
       `)
       .single()
 
@@ -125,12 +136,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Send invitation email
-    // For now, we'll just return the invitation data
-    // In production, you would send an email with the invitation link
+    // Send invitation email
+    const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/accept-invitation?token=${invitationToken}`
+
+    // Get inviter's name
+    const { data: inviterData } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', user.id)
+      .single()
+
+    const inviterName = inviterData?.name || user.email || 'Administrator'
+
+    // Send invitation email
+    const emailResult = await emailService.sendInvitationEmail({
+      to: email,
+      recipientName: email, // Use email as fallback since name might not be available
+      inviterName: inviterName,
+      invitationUrl,
+      role,
+      message: undefined, // Store invitations don't have custom messages
+      expiresIn: '7 days'
+    })
+
+    const emailSent = Boolean(emailResult?.success)
+    const emailMethod = emailResult?.method || null
+    const emailError = emailResult?.error || null
+
+    if (!emailSent) {
+      console.error('Failed to send invitation email:', emailError)
+      // Continue to return the invitation but surface that the email wasn't sent
+    }
 
     return NextResponse.json({
-      message: 'Invitation sent successfully',
+      message: emailSent ? 'Invitation sent successfully' : 'Invitation created but failed to send email',
+      email_sent: emailSent,
+      email_method: emailMethod,
+      ...(emailSent ? {} : { email_error: emailError }),
       invitation: {
         id: invitation.id,
         email: invitation.email,
@@ -187,11 +229,11 @@ export async function GET(request: NextRequest) {
     }
 
     let query = supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .select(`
         *,
         store:stores(name),
-        invited_by_user:users!store_invitations_invited_by_fkey(name, email)
+        invited_by_user:users!user_invitations_invited_by_fkey(name, email)
       `)
       .order('created_at', { ascending: false })
 

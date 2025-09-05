@@ -23,15 +23,15 @@ export async function GET(
 
     // Find invitation by token
     const { data: invitation, error: invitationError } = await supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .select(`
         *,
         store:stores(*),
-        invited_by_user:users!store_invitations_invited_by_fkey(name, email)
+        invited_by_user:users!user_invitations_invited_by_fkey(name, email)
       `)
-      .eq('token', token)
+      .eq('invitation_token', token)
       .gt('expires_at', new Date().toISOString())
-      .is('accepted_at', null)
+      .eq('status', 'pending')
       .single()
 
     if (invitationError || !invitation) {
@@ -87,15 +87,15 @@ export async function POST(
 
     // Find invitation by token
     const { data: invitation, error: invitationError } = await supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .select(`
         *,
         store:stores(*),
         organization:organizations(*)
       `)
-      .eq('token', token)
+      .eq('invitation_token', token)
       .gt('expires_at', new Date().toISOString())
-      .is('accepted_at', null)
+      .eq('status', 'pending')
       .single()
 
     if (invitationError || !invitation) {
@@ -207,9 +207,11 @@ export async function POST(
 
     // Mark invitation as accepted
     const { error: acceptError } = await supabase
-      .from('store_invitations')
+      .from('user_invitations')
       .update({
-        accepted_at: new Date().toISOString()
+        status: 'accepted',
+        accepted_at: new Date().toISOString(),
+        accepted_by: userId
       })
       .eq('id', invitation.id)
 
@@ -219,13 +221,17 @@ export async function POST(
     }
 
     // Log the invitation acceptance
-    await supabase.rpc('log_audit_event', {
-      p_action: 'invitation_accepted',
-      p_table_name: 'store_invitations',
-      p_record_id: invitation.id,
-      p_old_values: null,
-      p_new_values: { accepted_at: new Date().toISOString() }
-    })
+    await supabase
+      .from('audit_logs')
+      .insert({
+        organization_id: invitation.organization_id,
+        store_id: invitation.store_id,
+        user_id: userId,
+        action: 'invitation_accepted',
+        table_name: 'user_invitations',
+        record_id: invitation.id,
+        new_values: { status: 'accepted', accepted_at: new Date().toISOString() }
+      })
 
     return NextResponse.json({
       message: 'Invitation accepted successfully',

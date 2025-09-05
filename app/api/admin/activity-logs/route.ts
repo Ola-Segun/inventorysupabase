@@ -82,7 +82,12 @@ export async function GET(request: NextRequest) {
 
     // Apply filters based on user permissions
     if (userProfile.role === 'super_admin') {
-      // Super admin can see all logs
+      // Super admin can only see logs from their organization
+      if (userProfile.organization_id) {
+        query = query.eq('organization_id', userProfile.organization_id)
+      } else {
+        return NextResponse.json({ error: 'Unable to determine super admin organization' }, { status: 500 })
+      }
     } else if (userProfile.store_id) {
       // Regular admin can only see logs from their store
       query = query.eq('store_id', userProfile.store_id)
@@ -143,7 +148,12 @@ export async function GET(request: NextRequest) {
       .from('audit_logs')
       .select('id', { count: 'exact', head: true })
 
-    if (userProfile.role !== 'super_admin' && userProfile.store_id) {
+    if (userProfile.role === 'super_admin') {
+      // Super admin can only count logs from their organization
+      if (userProfile.organization_id) {
+        countQuery = countQuery.eq('organization_id', userProfile.organization_id)
+      }
+    } else if (userProfile.store_id) {
       countQuery = countQuery.eq('store_id', userProfile.store_id)
     }
 

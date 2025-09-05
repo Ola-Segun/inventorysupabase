@@ -553,44 +553,30 @@ ALTER TABLE store_analytics ENABLE ROW LEVEL SECURITY;
 -- Organizations policies
 CREATE POLICY "Users can view their own organization" ON organizations
     FOR SELECT USING (
-        id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Super admins can manage all organizations" ON organizations
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE id = auth.uid() AND role = 'super_admin'
-        )
+    get_user_role_safe(auth.uid()) = 'super_admin'
     );
 
 -- Stores policies
 CREATE POLICY "Users can view stores in their organization" ON stores
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Store owners and admins can manage their stores" ON stores
     FOR ALL USING (
         owner_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE id = auth.uid() AND
-                  organization_id = stores.organization_id AND
-                  role IN ('admin', 'super_admin')
-        )
+    (get_user_org_safe(auth.uid()) = stores.organization_id AND get_user_role_safe(auth.uid()) IN ('admin','super_admin'))
     );
 
 -- Users policies
 CREATE POLICY "Users can view users in their organization" ON users
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can update their own profile" ON users
@@ -598,134 +584,96 @@ CREATE POLICY "Users can update their own profile" ON users
 
 CREATE POLICY "Admins can manage users in their organization" ON users
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid() AND
-                  u.organization_id = users.organization_id AND
-                  u.role IN ('admin', 'super_admin')
-        )
+    (get_user_org_safe(auth.uid()) = users.organization_id AND get_user_role_safe(auth.uid()) IN ('admin','super_admin'))
     );
 
 -- Store invitations policies
 CREATE POLICY "Users can view invitations for their stores" ON store_invitations
     FOR SELECT USING (
-        store_id IN (
-            SELECT store_id FROM users WHERE id = auth.uid()
-        )
+    store_id = (SELECT store_id FROM users WHERE id = auth.uid())
     );
 
 CREATE POLICY "Admins can manage invitations for their stores" ON store_invitations
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid() AND
-                  u.store_id = store_invitations.store_id AND
-                  u.role IN ('admin', 'super_admin')
-        )
+    (get_user_role_safe(auth.uid()) IN ('admin','super_admin') AND get_user_org_safe(auth.uid()) IS NOT NULL)
     );
 
 -- Categories policies
 CREATE POLICY "Users can view categories in their organization" ON categories
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can create categories" ON categories
     FOR INSERT WITH CHECK (
-        user_has_permission(auth.uid(), 'categories.create') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'categories.create') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can update categories" ON categories
     FOR UPDATE USING (
-        user_has_permission(auth.uid(), 'categories.update') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'categories.update') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can delete categories" ON categories
     FOR DELETE USING (
-        user_has_permission(auth.uid(), 'categories.delete') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'categories.delete') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Products policies
 CREATE POLICY "Users can view products in their organization" ON products
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can create products" ON products
     FOR INSERT WITH CHECK (
-        user_has_permission(auth.uid(), 'products.create') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'products.create') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can update products" ON products
     FOR UPDATE USING (
-        user_has_permission(auth.uid(), 'products.update') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'products.update') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can delete products" ON products
     FOR DELETE USING (
-        user_has_permission(auth.uid(), 'products.delete') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'products.delete') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Orders policies
 CREATE POLICY "Users can view orders in their organization" ON orders
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can create orders" ON orders
     FOR INSERT WITH CHECK (
-        user_has_permission(auth.uid(), 'orders.create') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'orders.create') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can update orders" ON orders
     FOR UPDATE USING (
-        user_has_permission(auth.uid(), 'orders.update') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'orders.update') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "Users can delete orders" ON orders
     FOR DELETE USING (
-        user_has_permission(auth.uid(), 'orders.delete') AND
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    user_has_permission(auth.uid(), 'orders.delete') AND
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 -- Audit logs policies
 CREATE POLICY "Users can view audit logs for their organization" ON audit_logs
     FOR SELECT USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE id = auth.uid()
-        )
+    organization_id = get_user_org_safe(auth.uid())
     );
 
 CREATE POLICY "System can insert audit logs" ON audit_logs

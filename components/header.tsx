@@ -65,7 +65,12 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const isStoreOwner = userProfile?.is_store_owner
 
   // Priority: userProfile.role > JWT token role > user metadata role > default
-  const actualRole = userProfileRole || userRoleProp || userMetadataRole
+  let actualRole = userProfileRole || userRoleProp || userMetadataRole
+
+    // Special case: if metadata shows super_admin, always use that (overrides fallback profile)
+  if (userMetadataRole === 'super_admin') {
+    actualRole = 'super_admin'
+  }
 
   // Determine effective role
   let userRole = "guest"

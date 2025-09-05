@@ -63,19 +63,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if invitation already exists
+    // Check if there's an active invitation that would prevent sending a new one
     const { data: existingInvitation } = await supabase
       .from('user_invitations')
-      .select('id')
+      .select('id, status, expires_at')
       .eq('email', email)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'accepted'])
       .single()
 
     if (existingInvitation) {
-      return NextResponse.json(
-        { error: 'Invitation already sent to this email' },
-        { status: 409 }
-      )
+      if (existingInvitation.status === 'accepted') {
+        return NextResponse.json(
+          { error: 'User has already accepted an invitation' },
+          { status: 409 }
+        )
+      } else if (existingInvitation.status === 'pending') {
+        // Check if the pending invitation has expired
+        const expiresAt = new Date(existingInvitation.expires_at)
+        const now = new Date()
+
+        if (expiresAt > now) {
+          return NextResponse.json(
+            { error: 'An active invitation already exists for this email' },
+            { status: 409 }
+          )
+        } else {
+          // Expired pending invitation - we can resend
+          console.log('Found expired pending invitation, allowing resend')
+        }
+      }
+    }
+
+    // Auto-expire old pending invitations for this email
+    await supabase.rpc('expire_old_invitations')
+
+    // Check for expired or cancelled invitations that we can clean up
+    const { data: expiredInvitations } = await supabase
+      .from('user_invitations')
+      .select('id')
+      .eq('email', email)
+      .in('status', ['expired', 'cancelled'])
+
+    // Clean up old expired/cancelled invitations (older than 30 days)
+    if (expiredInvitations && expiredInvitations.length > 0) {
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+      await supabase
+        .from('user_invitations')
+        .delete()
+        .eq('email', email)
+        .in('status', ['expired', 'cancelled'])
+        .lt('created_at', thirtyDaysAgo.toISOString())
+
+      console.log(`Cleaned up ${expiredInvitations.length} old invitations for ${email}`)
     }
 
     // Generate invitation token
@@ -119,6 +160,16 @@ export async function POST(request: NextRequest) {
 
     const inviterName = inviterProfile?.name || currentUser.email || 'Administrator'
 
+    console.log('📧 INVITATION API: Preparing to send invitation email')
+    console.log('📧 INVITATION API: Email details:', {
+      to: email,
+      recipientName: name,
+      inviterName: inviterName,
+      role: role,
+      message: message ? '✓ Included' : '✗ None',
+      invitationUrl: invitationUrl.substring(0, 50) + '...'
+    })
+
     // Send invitation email
     const emailResult = await emailService.sendInvitationEmail({
       to: email,
@@ -130,9 +181,31 @@ export async function POST(request: NextRequest) {
       expiresIn: '7 days'
     })
 
-    if (!emailResult.success) {
-      console.error('Failed to send invitation email:', emailResult.error)
-      // Don't fail the invitation creation if email fails
+    console.log('📧 INVITATION API: Email service response:', {
+      success: emailResult.success,
+      method: emailResult.method,
+      error: emailResult.error,
+      messageId: emailResult.messageId
+    })
+
+    const emailSent = Boolean(emailResult?.success)
+    const emailMethod = emailResult?.method || null
+    const emailError = emailResult?.error || null
+
+    if (!emailSent) {
+      console.error('❌ INVITATION API: Failed to send invitation email:', {
+        email: email,
+        error: emailError,
+        method: emailMethod,
+        provider: process.env.EMAIL_PROVIDER
+      })
+      // Continue to return the invitation but surface that the email wasn't sent
+    } else {
+      console.log('✅ INVITATION API: Email sent successfully:', {
+        email: email,
+        method: emailMethod,
+        invitationId: invitation.id
+      })
     }
 
     // Log the action
@@ -151,7 +224,10 @@ export async function POST(request: NextRequest) {
       })
 
     return NextResponse.json({
-      message: 'Invitation sent successfully',
+      message: emailSent ? 'Invitation sent successfully' : 'Invitation created but failed to send email',
+      email_sent: emailSent,
+      email_method: emailMethod,
+      ...(emailSent ? {} : { email_error: emailError }),
       invitation: {
         id: invitation.id,
         email: invitation.email,

@@ -835,8 +835,30 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
   const hasPermission = async (permission: string): Promise<boolean> => {
     if (!user || !userProfile) return false
 
-    // Super admin has all permissions
-    if (userProfile.role === "super_admin") return true
+    // Super admin has restricted permissions within their organization only
+    if (userProfile.role === "super_admin") {
+      // Super admins cannot access platform-wide permissions
+      const restrictedPermissions = [
+        "organizations.read",
+        "organizations.update",
+        "platform.stats",
+        "platform.admin"
+      ]
+
+      // Check if this is a platform-wide permission that should be restricted
+      if (restrictedPermissions.some(restricted => permission.includes(restricted))) {
+        return false
+      }
+
+      // For user management, super admins can only manage users in their organization
+      if (permission.startsWith("users.") && permission !== "users.read" && permission !== "users.invite") {
+        // Additional check will be done at API level
+        return true
+      }
+
+      // Allow other permissions within their organization
+      return true
+    }
 
     // Check role-based permissions
     const rolePermissions: Record<string, string[]> = {
@@ -920,10 +942,14 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
   const getUserPermissions = async (): Promise<any[]> => {
     if (!userProfile) return []
 
-    // Super admin has all permissions
+    // Super admin has restricted permissions within their organization
     if (userProfile.role === "super_admin") {
       return [
-        "users.*",
+        "users.read",
+        "users.create",
+        "users.update",
+        "users.delete",
+        "users.invite",
         "products.*",
         "orders.*",
         "categories.*",
@@ -1117,10 +1143,20 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
     if (!isSuperAdmin) throw new Error("Unauthorized")
 
     try {
-      const { data, error } = await supabase.from("organizations").select("*").order("created_at", { ascending: false })
+      // Super admins can only see their own organization
+      if (userProfile?.organization_id) {
+        const { data, error } = await supabase
+          .from("organizations")
+          .select("*")
+          .eq("id", userProfile.organization_id)
+          .single()
 
-      if (error) throw error
-      return data || []
+        if (error) throw error
+        return data ? [data] : []
+      } else {
+        // If no organization_id, return empty array
+        return []
+      }
     } catch (error: any) {
       console.error("Error fetching organizations:", error)
       throw new Error(error.message || "Failed to fetch organizations")
@@ -1144,35 +1180,50 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
     if (!isSuperAdmin) throw new Error("Unauthorized")
 
     try {
-      // Get organization stats
-      const { data: orgStats, error: orgError } = await supabase
-        .from("organizations")
-        .select("subscription_tier, subscription_status, created_at")
+      // Super admins can only see stats for their own organization
+      if (userProfile?.organization_id) {
+        // Get organization stats for current org only
+        const { data: orgStats, error: orgError } = await supabase
+          .from("organizations")
+          .select("subscription_tier, subscription_status, created_at")
+          .eq("id", userProfile.organization_id)
+          .single()
 
-      if (orgError) throw orgError
+        if (orgError) throw orgError
 
-      // Get user stats
-      const { data: userStats, error: userError } = await supabase.from("users").select("role, created_at")
+        // Get user stats for current organization only
+        const { data: userStats, error: userError } = await supabase
+          .from("users")
+          .select("role, created_at")
+          .eq("organization_id", userProfile.organization_id)
 
-      if (userError) throw userError
+        if (userError) throw userError
 
-      // Calculate stats
-      const totalOrganizations = orgStats?.length || 0
-      const activeOrganizations = orgStats?.filter((org) => org.subscription_status === "active").length || 0
-      const totalUsers = userStats?.length || 0
+        // Calculate stats for current organization
+        const totalOrganizations = orgStats ? 1 : 0
+        const activeOrganizations = orgStats?.subscription_status === "active" ? 1 : 0
+        const totalUsers = userStats?.length || 0
 
-      const tierBreakdown =
-        orgStats?.reduce((acc: any, org) => {
-          acc[org.subscription_tier] = (acc[org.subscription_tier] || 0) + 1
-          return acc
-        }, {}) || {}
+        const tierBreakdown = orgStats ? {
+          [orgStats.subscription_tier]: 1
+        } : {}
 
-      return {
-        totalOrganizations,
-        activeOrganizations,
-        totalUsers,
-        tierBreakdown,
-        recentOrganizations: orgStats?.slice(0, 5) || [],
+        return {
+          totalOrganizations,
+          activeOrganizations,
+          totalUsers,
+          tierBreakdown,
+          recentOrganizations: orgStats ? [orgStats] : [],
+        }
+      } else {
+        // If no organization_id, return empty stats
+        return {
+          totalOrganizations: 0,
+          activeOrganizations: 0,
+          totalUsers: 0,
+          tierBreakdown: {},
+          recentOrganizations: [],
+        }
       }
     } catch (error: any) {
       console.error("Error fetching platform stats:", error)

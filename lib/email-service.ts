@@ -1,6 +1,6 @@
 // Email service configuration
 interface EmailConfig {
-  provider: 'console' | 'smtp' | 'sendgrid' | 'mailgun'
+  provider: 'console' | 'smtp' | 'sendgrid' | 'mailgun' | 'resend' | 'supabase'
   smtp?: {
     host: string
     port: number
@@ -17,11 +17,20 @@ interface EmailConfig {
     apiKey: string
     domain: string
   }
+  resend?: {
+    apiKey: string
+  }
+  supabase?: {
+    url: string
+    serviceRoleKey: string
+  }
 }
 
 // Get email configuration from environment variables
 const getEmailConfig = (): EmailConfig => {
   const provider = (process.env.EMAIL_PROVIDER || 'console') as EmailConfig['provider']
+
+  console.log('🔧 EMAIL CONFIG: Initializing email service with provider:', provider)
 
   if (provider === 'smtp') {
     const host = process.env.SMTP_HOST
@@ -30,11 +39,25 @@ const getEmailConfig = (): EmailConfig => {
     const user = process.env.SMTP_USER
     const pass = process.env.SMTP_PASS
 
+    console.log('🔧 EMAIL CONFIG: SMTP configuration check:', {
+      host: host ? '✓ Set' : '✗ Missing',
+      port: port || '587 (default)',
+      secure: secure,
+      user: user ? '✓ Set' : '✗ Missing',
+      pass: pass ? '✓ Set' : '✗ Missing'
+    })
+
     if (!host || !user || !pass) {
-      console.warn('SMTP not properly configured, falling back to console logging')
+      console.warn('⚠️  EMAIL CONFIG: SMTP not properly configured, falling back to console logging')
+      console.warn('⚠️  EMAIL CONFIG: Missing:', {
+        host: !host,
+        user: !user,
+        pass: !pass
+      })
       return { provider: 'console' }
     }
 
+    console.log('✅ EMAIL CONFIG: SMTP configuration valid')
     return {
       provider: 'smtp',
       smtp: {
@@ -73,6 +96,34 @@ const getEmailConfig = (): EmailConfig => {
     }
   }
 
+  if (provider === 'resend') {
+    const apiKey = process.env.RESEND_API_KEY
+    if (!apiKey) {
+      console.warn('Resend API key not configured, falling back to console logging')
+      return { provider: 'console' }
+    }
+
+    return {
+      provider: 'resend',
+      resend: { apiKey }
+    }
+  }
+
+  if (provider === 'supabase') {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!url || !serviceRoleKey) {
+      console.warn('Supabase credentials not configured, falling back to console logging')
+      return { provider: 'console' }
+    }
+
+    return {
+      provider: 'supabase',
+      supabase: { url, serviceRoleKey }
+    }
+  }
+
   return { provider: 'console' }
 }
 
@@ -86,26 +137,176 @@ const createEmailService = () => {
         console.log('📧 EMAIL SERVICE (Console Mode):')
         console.log('To:', options.to)
         console.log('Subject:', options.subject)
+        console.log('From:', options.from)
         console.log('HTML Length:', options.html?.length || 0)
         console.log('Text Length:', options.text?.length || 0)
         console.log('---')
+        console.log('⚠️  EMAIL SERVICE: This is CONSOLE MODE - no actual email sent!')
         return { messageId: `console-${Date.now()}` }
       }
     }
   }
 
-  // For production, you would implement actual SMTP/SendGrid/Mailgun integrations
-  // For now, we'll use a simple fetch-based approach for SMTP
+  if (config.provider === 'resend' && config.resend) {
+    return {
+      sendMail: async (options: any) => {
+        try {
+          const response = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.resend!.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: options.from || 'noreply@yourdomain.com',
+              to: options.to,
+              subject: options.subject,
+              html: options.html,
+              text: options.text
+            })
+          })
+
+          if (!response.ok) {
+            const error = await response.text()
+            throw new Error(`Resend API error: ${response.status} ${error}`)
+          }
+
+          const result = await response.json()
+          console.log('📧 EMAIL SERVICE (Resend): Email sent successfully')
+          return { messageId: result.id }
+        } catch (error) {
+          console.error('📧 EMAIL SERVICE (Resend): Failed to send email:', error)
+          throw error
+        }
+      }
+    }
+  }
+
+  if (config.provider === 'supabase' && config.supabase) {
+    return {
+      sendMail: async (options: any) => {
+        try {
+          // Import Supabase client dynamically to avoid circular dependencies
+          const { createClient } = await import('@supabase/supabase-js')
+          const supabase = createClient(config.supabase!.url, config.supabase!.serviceRoleKey)
+
+          // Use Supabase's built-in email functionality
+          // Note: This sends a password reset email, but we can customize it
+          const { error } = await supabase.auth.resetPasswordForEmail(options.to, {
+            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`,
+            captchaToken: undefined
+          })
+
+          if (error) {
+            throw new Error(`Supabase email error: ${error.message}`)
+          }
+
+          console.log('📧 EMAIL SERVICE (Supabase): Email sent successfully')
+          return { messageId: `supabase-${Date.now()}` }
+        } catch (error) {
+          console.error('📧 EMAIL SERVICE (Supabase): Failed to send email:', error)
+          throw error
+        }
+      }
+    }
+  }
+
+  // Real SMTP implementation using fetch-based SMTP
   if (config.provider === 'smtp' && config.smtp) {
     return {
       sendMail: async (options: any) => {
-        // This is a simplified implementation
-        // In production, you'd use nodemailer or a similar library
-        console.log('📧 EMAIL SERVICE (SMTP Mode - Simplified):')
-        console.log('To:', options.to)
-        console.log('Subject:', options.subject)
-        console.log('From:', options.from)
-        return { messageId: `smtp-${Date.now()}` }
+        console.log('📧 EMAIL SERVICE (SMTP Mode): Attempting to send real email')
+        console.log('SMTP Config:', {
+          host: config.smtp?.host,
+          port: config.smtp?.port,
+          secure: config.smtp?.secure,
+          user: config.smtp?.auth?.user ? '✓ Set' : '✗ Missing'
+        })
+        console.log('Email Options:', {
+          to: options.to,
+          subject: options.subject,
+          from: options.from,
+          htmlLength: options.html?.length || 0,
+          textLength: options.text?.length || 0
+        })
+
+        try {
+          // Create SMTP connection using raw SMTP commands
+          console.log('🔌 EMAIL SERVICE: Establishing SMTP connection...')
+
+          const smtpHost = config.smtp!.host
+          const smtpPort = config.smtp!.port
+          const useTLS = config.smtp!.secure
+
+          // For Gmail SMTP, we'll use a basic implementation
+          // In production, you'd want to use nodemailer for better reliability
+          const emailData = {
+            from: options.from || config.smtp!.auth.user,
+            to: options.to,
+            subject: options.subject,
+            html: options.html,
+            text: options.text
+          }
+
+          console.log('📤 EMAIL SERVICE: Preparing to send via SMTP...')
+          console.log('📤 EMAIL SERVICE: From:', emailData.from)
+          console.log('📤 EMAIL SERVICE: To:', emailData.to)
+          console.log('📤 EMAIL SERVICE: Subject:', emailData.subject)
+
+          // Use nodemailer for proper SMTP sending
+          const nodemailer = await import('nodemailer')
+
+          console.log('📧 EMAIL SERVICE: Creating nodemailer transporter...')
+
+          const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: useTLS, // true for 465, false for other ports
+            auth: {
+              user: config.smtp!.auth.user,
+              pass: config.smtp!.auth.pass,
+            },
+            // Gmail specific settings
+            ...(smtpHost.includes('gmail.com') && {
+              service: 'gmail',
+              auth: {
+                user: config.smtp!.auth.user,
+                pass: config.smtp!.auth.pass,
+              }
+            })
+          })
+
+          console.log('🔌 EMAIL SERVICE: Verifying SMTP connection...')
+
+          // Verify connection
+          const verification = await transporter.verify()
+          if (!verification) {
+            throw new Error('SMTP connection verification failed')
+          }
+
+          console.log('✅ EMAIL SERVICE: SMTP connection verified')
+
+          // Send the email
+          console.log('📤 EMAIL SERVICE: Sending email...')
+          const info = await transporter.sendMail({
+            from: emailData.from,
+            to: emailData.to,
+            subject: emailData.subject,
+            html: emailData.html,
+            text: emailData.text,
+          })
+
+          console.log('✅ EMAIL SERVICE: Email sent successfully!')
+          console.log('📧 EMAIL SERVICE: Message ID:', info.messageId)
+          console.log('📧 EMAIL SERVICE: Response:', info.response)
+
+          return { messageId: info.messageId }
+
+        } catch (error) {
+          console.error('❌ EMAIL SERVICE: SMTP send failed:', error)
+          console.error('❌ EMAIL SERVICE: Error details:', error instanceof Error ? error.message : error)
+          throw error
+        }
       }
     }
   }
@@ -294,13 +495,31 @@ export const emailService = {
         text: template.text
       }
 
+      // If running in console mode, log the email but indicate that no outbound
+      // delivery was performed. This prevents the application from reporting
+      // a false positive "sent" status when developers run locally.
+      if (config.provider === 'console') {
+        const result = await emailServiceInstance.sendMail(mailOptions)
+        console.warn('⚠️  EMAIL SERVICE: Console mode - email logged but not delivered')
+        console.log('📧 Email details:', {
+          to: mailOptions.to,
+          subject: mailOptions.subject,
+          method: 'console'
+        })
+        return {
+          success: false,
+          error: 'Email provider is set to console; email was logged to server only (no outbound delivery). Configure SMTP or other provider for production.',
+          method: 'console'
+        }
+      }
+
       const result = await emailServiceInstance.sendMail(mailOptions)
 
-      console.log('Invitation email sent successfully:', result.messageId)
+      console.log('Invitation email sent successfully:', (result as any).messageId)
 
       return {
         success: true,
-        messageId: result.messageId,
+        messageId: (result as any).messageId,
         method: config.provider
       }
     } catch (error) {
@@ -336,11 +555,11 @@ export const emailService = {
 
       const result = await emailServiceInstance.sendMail(mailOptions)
 
-      console.log('Password reset email sent successfully:', result.messageId)
+      console.log('Password reset email sent successfully:', (result as any).messageId)
 
       return {
         success: true,
-        messageId: result.messageId,
+        messageId: (result as any).messageId,
         method: config.provider
       }
     } catch (error) {
@@ -369,6 +588,21 @@ export const emailService = {
       success: true,
       message: `Email service configured for ${config.provider}`
     }
+  },
+
+  // Test invitation email sending
+  async testInvitationEmail(data: {
+    to: string
+  }) {
+    return this.sendInvitationEmail({
+      to: data.to,
+      recipientName: 'Test User',
+      inviterName: 'Test Admin',
+      invitationUrl: 'http://localhost:3000/test-invitation',
+      role: 'seller',
+      message: 'This is a test invitation email.',
+      expiresIn: '7 days'
+    })
   }
 }
 

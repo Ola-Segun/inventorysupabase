@@ -6,15 +6,49 @@ import { cookies } from 'next/headers'
  */
 export async function checkAdminPermissions(supabase: any, userId: string): Promise<boolean> {
   try {
-    // First, try to get user profile with store ownership info
+    // First try the stored procedure if it exists
+    try {
+      const { data: userProfile, error: profileError } = await supabase
+        .rpc('get_user_profile_safe', { user_uuid: userId })
+
+      if (!profileError && userProfile && userProfile.length > 0) {
+        const profile = userProfile[0]
+
+        // Check 1: Super admin has all permissions
+        if (profile.role === 'super_admin') {
+          return true
+        }
+
+        // Check 2: Admin role has admin permissions
+        if (profile.role === 'admin') {
+          return true
+        }
+
+        // Check 3: Store owners have admin permissions for their store
+        if (profile.is_store_owner && profile.store_id) {
+          return true
+        }
+
+        return false
+      }
+    } catch (rpcError) {
+      console.log('Stored procedure not available, using fallback method')
+    }
+
+    // Fallback: Direct query with service role (for admin operations)
     const { data: userProfile, error: profileError } = await supabase
       .from('users')
-      .select('role, store_id, is_store_owner')
+      .select('role, store_id, organization_id, is_store_owner')
       .eq('id', userId)
       .single()
 
-    if (profileError || !userProfile) {
+    if (profileError) {
       console.error('Failed to get user profile for permission check:', profileError)
+      return false
+    }
+
+    if (!userProfile) {
+      console.error('No user profile found for permission check')
       return false
     }
 
@@ -31,19 +65,6 @@ export async function checkAdminPermissions(supabase: any, userId: string): Prom
     // Check 3: Store owners have admin permissions for their store
     if (userProfile.is_store_owner && userProfile.store_id) {
       return true
-    }
-
-    // Check 4: Use database function as fallback (in case RLS policies need it)
-    try {
-      const { data: isAdmin, error: funcError } = await supabase.rpc('is_user_admin', {
-        user_uuid: userId
-      })
-
-      if (!funcError && isAdmin) {
-        return true
-      }
-    } catch (funcError) {
-      console.warn('Database function check failed, continuing with basic checks:', funcError)
     }
 
     return false

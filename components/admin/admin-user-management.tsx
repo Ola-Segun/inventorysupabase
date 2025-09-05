@@ -166,7 +166,7 @@ const activityLogs: ActivityLog[] = []
 const activeUsers: any[] = []
 
 export function AdminUserManagement() {
-  const { user, userProfile, organization, store } = useSupabaseAuth()
+  const { user, userProfile, organization, store, isSuperAdmin } = useSupabaseAuth()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -330,16 +330,9 @@ export function AdminUserManagement() {
         throw new Error(data.error || 'Failed to fetch active users')
       }
 
-      // Transform API data to match component interface
-      const transformedUsers = (data.activeUsers || []).map((user: any) => ({
-        id: user.id,
-        name: user.name,
-        status: user.status,
-        currentAction: user.currentAction,
-        since: new Date(user.since)
-      }))
-
-      setActiveUsers(transformedUsers)
+      // The API returns statistics, not user objects
+      // For now, we'll set activeUsers to an empty array since we don't have individual user data
+      setActiveUsers([])
     } catch (error: any) {
       console.error('Error fetching active users:', error)
       // Keep empty array if API fails
@@ -446,11 +439,24 @@ export function AdminUserManagement() {
     }
 
     try {
-  const response = await fetch('/api/admin/users/invite', {
+      // Get CSRF token first
+      const csrfResponse = await fetch('/api/auth/csrf-token', {
+        credentials: 'include'
+      })
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
+
+      const { token: csrfToken } = await csrfResponse.json()
+
+      // Make the invite request with CSRF token
+      const response = await fetch('/api/admin/users/invite', {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
         },
         body: JSON.stringify({
           name: inviteUser.name,
@@ -466,7 +472,12 @@ export function AdminUserManagement() {
         throw new Error(data.error || 'Failed to send invitation')
       }
 
-      alert("Invitation sent successfully!")
+      // Check if email was actually sent
+      if (data.email_sent) {
+        alert("Invitation sent successfully!")
+      } else {
+        alert(`Invitation created but email failed to send: ${data.email_error || 'Unknown error'}`)
+      }
 
       // Reset form and close dialog
       setInviteUser({
@@ -953,6 +964,17 @@ export function AdminUserManagement() {
                 <p className="text-sm text-muted-foreground">
                   Admin: {user?.user_metadata?.name || user?.email} • {users.length} total users
                 </p>
+                {isSuperAdmin && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                      <Crown className="h-3 w-3 mr-1" />
+                      Super Admin
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Organization-scoped access
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">

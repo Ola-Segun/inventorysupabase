@@ -120,8 +120,8 @@ export default function SuperAdminDashboard() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Super Admin Dashboard"
-        description="Platform-wide management and analytics"
+        title="Organization Admin Dashboard"
+        description="Manage your organization's users and data"
       />
 
       {error && (
@@ -135,13 +135,13 @@ export default function SuperAdminDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Organizations</CardTitle>
+            <CardTitle className="text-sm font-medium">Your Organization</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{platformStats?.totalOrganizations || 0}</div>
+            <div className="text-2xl font-bold">{organizations[0]?.name || 'N/A'}</div>
             <p className="text-xs text-muted-foreground">
-              {platformStats?.activeOrganizations || 0} active
+              {organizations[0]?.subscription_tier || 'free'} plan
             </p>
           </CardContent>
         </Card>
@@ -154,7 +154,7 @@ export default function SuperAdminDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{platformStats?.totalUsers || 0}</div>
             <p className="text-xs text-muted-foreground">
-              Across all organizations
+              In your organization
             </p>
           </CardContent>
         </Card>
@@ -188,39 +188,37 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
-      {/* Subscription Tier Breakdown */}
+      {/* Organization Details */}
       <Card>
         <CardHeader>
-          <CardTitle>Subscription Distribution</CardTitle>
-          <CardDescription>Breakdown of organizations by subscription tier</CardDescription>
+          <CardTitle>Organization Details</CardTitle>
+          <CardDescription>Your organization's subscription and status</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            {platformStats?.tierBreakdown && Object.entries(platformStats.tierBreakdown).map(([tier, count]) => (
-              <div key={tier} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  {getTierIcon(tier)}
-                  <div>
-                    <div className="font-medium capitalize">{tier}</div>
-                    <div className="text-sm text-muted-foreground">{count} organizations</div>
-                  </div>
-                </div>
-                <div className="text-2xl font-bold">{count}</div>
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="flex items-center gap-3">
+              {getTierIcon(organizations[0]?.subscription_tier || 'free')}
+              <div>
+                <div className="font-medium capitalize">{organizations[0]?.subscription_tier || 'free'}</div>
+                <div className="text-sm text-muted-foreground">Current subscription tier</div>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center gap-3">
+              {getStatusBadge(organizations[0]?.subscription_status || 'active')}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Organizations Management */}
+      {/* Organization Management */}
       <Card>
         <CardHeader>
-          <CardTitle>Organization Management</CardTitle>
-          <CardDescription>Manage all organizations on the platform</CardDescription>
+          <CardTitle>Your Organization</CardTitle>
+          <CardDescription>Manage your organization's settings and details</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {organizations.slice(0, 10).map((org) => (
+            {organizations.map((org) => (
               <div key={org.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -247,14 +245,6 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
             ))}
-
-            {organizations.length > 10 && (
-              <div className="text-center pt-4">
-                <Button variant="outline" onClick={() => router.push('/admin/organizations')}>
-                  View All Organizations ({organizations.length})
-                </Button>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -263,7 +253,7 @@ export default function SuperAdminDashboard() {
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common administrative tasks</CardDescription>
+          <CardDescription>Common administrative tasks for your organization</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -273,7 +263,7 @@ export default function SuperAdminDashboard() {
               onClick={() => router.push('/admin/organizations')}
             >
               <Building2 className="h-6 w-6" />
-              Manage Organizations
+              Manage Organization
             </Button>
             <Button
               variant="outline"
@@ -289,7 +279,7 @@ export default function SuperAdminDashboard() {
               onClick={() => router.push('/admin/analytics')}
             >
               <BarChart3 className="h-6 w-6" />
-              Platform Analytics
+              Organization Analytics
             </Button>
             <Button
               variant="outline"
@@ -297,7 +287,7 @@ export default function SuperAdminDashboard() {
               onClick={() => router.push('/admin/settings')}
             >
               <Settings className="h-6 w-6" />
-              System Settings
+              Organization Settings
             </Button>
           </div>
         </CardContent>

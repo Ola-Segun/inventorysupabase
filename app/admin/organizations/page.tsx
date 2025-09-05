@@ -151,8 +151,8 @@ export default function OrganizationsManagementPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Organizations Management"
-        description="Manage all organizations on the platform"
+        title="Organization Management"
+        description="Manage your organization's settings and details"
       />
 
       {error && (
@@ -207,12 +207,9 @@ export default function OrganizationsManagementPage() {
       {/* Organizations List */}
       <Card>
         <CardHeader>
-          <CardTitle>Organizations ({filteredOrganizations.length})</CardTitle>
+          <CardTitle>Your Organization</CardTitle>
           <CardDescription>
-            {searchTerm || statusFilter !== "all" || tierFilter !== "all"
-              ? `Showing ${filteredOrganizations.length} of ${organizations.length} organizations`
-              : `Total ${organizations.length} organizations`
-            }
+            Manage your organization's subscription and settings
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -285,15 +282,15 @@ export default function OrganizationsManagementPage() {
         </CardContent>
       </Card>
 
-      {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Organization Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
-              <div className="text-2xl font-bold">{organizations.length}</div>
+              <div className="text-2xl font-bold">{organizations[0]?.name || 'N/A'}</div>
             </div>
-            <p className="text-xs text-muted-foreground">Total Organizations</p>
+            <p className="text-xs text-muted-foreground">Organization Name</p>
           </CardContent>
         </Card>
 
@@ -302,34 +299,34 @@ export default function OrganizationsManagementPage() {
             <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-500" />
               <div className="text-2xl font-bold">
-                {organizations.filter(org => org.subscription_status === 'active').length}
+                {organizations[0]?.subscription_status === 'active' ? 'Active' : organizations[0]?.subscription_status || 'N/A'}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Active Organizations</p>
+            <p className="text-xs text-muted-foreground">Subscription Status</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-blue-500" />
-              <div className="text-2xl font-bold">
-                {organizations.filter(org => org.subscription_tier === 'pro').length}
+              {getTierIcon(organizations[0]?.subscription_tier || 'free')}
+              <div className="text-2xl font-bold capitalize">
+                {organizations[0]?.subscription_tier || 'free'}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Pro Subscribers</p>
+            <p className="text-xs text-muted-foreground">Subscription Tier</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
-              <Crown className="h-4 w-4 text-purple-500" />
+              <Users className="h-4 w-4 text-blue-500" />
               <div className="text-2xl font-bold">
-                {organizations.filter(org => org.subscription_tier === 'enterprise').length}
+                {organizations[0]?.id ? 'Available' : 'N/A'}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Enterprise Subscribers</p>
+            <p className="text-xs text-muted-foreground">Organization Access</p>
           </CardContent>
         </Card>
       </div>

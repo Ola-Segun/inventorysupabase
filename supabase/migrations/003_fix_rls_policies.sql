@@ -36,11 +36,7 @@ CREATE POLICY "Users can update their own profile" ON users
 -- Policy for super admins to manage all users (no recursion - direct role check)
 CREATE POLICY "Super admins can manage all users" ON users
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid() AND u.role = 'super_admin'
-            AND u.status = 'active'
-        )
+    (get_user_role_safe(auth.uid()) = 'super_admin' AND get_user_status_safe(auth.uid()) = 'active')
     );
 
 -- Policy for admins to manage users in their organization
@@ -49,19 +45,9 @@ CREATE POLICY "Super admins can manage all users" ON users
 CREATE POLICY "Admins can manage users in their organization" ON users
     FOR ALL USING (
         -- Allow if the current user is an admin in the same organization
-        organization_id IN (
-            SELECT DISTINCT u.organization_id
-            FROM users u
-            WHERE u.id = auth.uid()
-            AND u.role IN ('admin', 'super_admin')
-            AND u.status = 'active'
-        )
-        AND EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid()
-            AND u.role IN ('admin', 'super_admin')
-            AND u.status = 'active'
-        )
+    (get_user_role_safe(auth.uid()) IN ('admin','super_admin')
+     AND get_user_org_safe(auth.uid()) = users.organization_id
+     AND get_user_status_safe(auth.uid()) = 'active')
     );
 
 -- =====================================================
