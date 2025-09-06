@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { emailService } from '@/lib/email-service'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +19,39 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🧪 TEST EMAIL: Starting email test for:', email)
+
+    // Test admin.createUser
+    console.log('🧪 TEST ADMIN: Testing admin.createUser...')
+    const testEmail = `test-${Date.now()}@example.com`
+    const testPassword = 'testpassword123'
+
+    const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
+      email: testEmail,
+      password: testPassword,
+      email_confirm: true,
+      user_metadata: {
+        name: 'Test User',
+        role: 'seller'
+      }
+    })
+
+    console.log('🧪 TEST ADMIN: Admin createUser result:', {
+      hasData: !!adminData,
+      hasUser: !!adminData?.user,
+      userId: adminData?.user?.id,
+      email: adminData?.user?.email,
+      error: adminError ? {
+        message: adminError.message,
+        status: adminError.status
+      } : null
+    })
+
+    // Clean up test user if created
+    if (adminData?.user?.id && !adminError) {
+      console.log('🧪 TEST ADMIN: Cleaning up test user...')
+      await supabase.auth.admin.deleteUser(adminData.user.id)
+      console.log('🧪 TEST ADMIN: Test user cleaned up')
+    }
 
     // Test invitation email
     const testResult = await emailService.sendInvitationEmail({
@@ -34,7 +73,13 @@ export async function POST(request: NextRequest) {
         : 'Test email failed to send',
       method: testResult.method,
       error: testResult.error,
-      messageId: testResult.messageId
+      messageId: testResult.messageId,
+      adminTest: {
+        success: !adminError,
+        userCreated: !!adminData?.user,
+        userId: adminData?.user?.id,
+        error: adminError?.message
+      }
     })
 
   } catch (error) {

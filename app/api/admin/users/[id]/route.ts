@@ -7,7 +7,7 @@ type UserRole = 'super_admin' | 'admin' | 'manager' | 'cashier' | 'seller'
 // PUT /api/admin/users/[id] - Update user
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createAdminSupabaseClient()
@@ -23,7 +23,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    const userId = params.id
+    const { id: userId } = await params
     const { name, email, role, phone, status } = await request.json()
 
     // Get current user's permissions
@@ -165,7 +165,7 @@ export async function PUT(
 // DELETE /api/admin/users/[id] - Delete user
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createAdminSupabaseClient()
@@ -181,7 +181,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    const userId = params.id
+    const { id: userId } = await params
 
     // Get current user's permissions
     const { data: currentUserProfile, error: profileError } = await supabase

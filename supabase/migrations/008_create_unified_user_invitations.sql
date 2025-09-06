@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS user_invitations (
     invitation_token VARCHAR(255) UNIQUE NOT NULL,
     status invitation_status DEFAULT 'pending',
     message TEXT,
+    initial_password VARCHAR(255), -- Store initial password for invited users
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
     accepted_at TIMESTAMPTZ,
     accepted_by UUID REFERENCES users(id) ON DELETE SET NULL,

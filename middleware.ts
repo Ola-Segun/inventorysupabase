@@ -135,9 +135,9 @@ export async function middleware(request: NextRequest) {
 
     // Apply CSRF protection for state-changing API routes (exclude admin routes for testing)
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method) && !pathname.startsWith('/api/admin/')) {
-      // Allow the test-email endpoint to be called without CSRF for local/dev testing
-      if (pathname === '/api/auth/test-email') {
-        console.log('Middleware: Skipping CSRF for /api/auth/test-email (dev/test endpoint)')
+      // Allow certain endpoints to be called without CSRF for public operations
+      if (pathname === '/api/auth/test-email' || pathname.startsWith('/api/auth/invitations/')) {
+        console.log('Middleware: Skipping CSRF for', pathname, '(public endpoint)')
       } else {
         const csrfCheck = csrfProtection.middleware(request)
         if (csrfCheck) {

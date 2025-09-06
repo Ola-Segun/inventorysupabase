@@ -173,7 +173,7 @@ function AuthWrapper({
   }
 
   // Define what pages are public and don't require layout
-  const publicPages = ['/', '/auth', '/welcome', '/signup', '/setup', '/login', '/auth/confirm-email']
+  const publicPages = ['/', '/auth', '/welcome', '/signup', '/setup', '/login', '/auth/confirm-email', '/auth/accept-invitation']
   const isPublicPage = pathname ? publicPages.includes(pathname) : false
 
 
@@ -216,7 +216,7 @@ function AuthWrapper({
 
   // Handle authentication redirect - prevent race conditions
   useEffect(() => {
-    console.log("🔄 ClientLayout: Auth redirect check:", {
+    console.log("ClientLayout: Auth redirect check:", {
       isAuthenticated,
       isPublicPage,
       authLoading,
@@ -234,7 +234,7 @@ function AuthWrapper({
 
     // Only redirect to login if there are no auth cookies (prevents race after login)
     if (!isAuthenticated && !isPublicPage && !authLoading && !hasAuthCookies && pathname !== '/login') {
-      console.log("🔄 ClientLayout: Redirecting to login");
+      console.log("ClientLayout: Redirecting to login");
       const t = setTimeout(() => router.replace('/login'), 150)
       return () => clearTimeout(t)
     }
@@ -242,19 +242,19 @@ function AuthWrapper({
     // Redirect authenticated users away from public pages
     if (isAuthenticated && isPublicPage && !authLoading) {
       const redirectTo = '/dashboard'
-      console.log("🔄 ClientLayout: Redirecting authenticated user from public page to:", redirectTo)
+      console.log("ClientLayout: Redirecting authenticated user from public page to:", redirectTo)
 
       // Small delay to ensure state is stable, then hard redirect
       setTimeout(() => {
         try {
-          console.log("🔄 ClientLayout: Executing hard redirect to:", redirectTo)
+          console.log("ClientLayout: Executing hard redirect to:", redirectTo)
           window.location.href = redirectTo
         } catch (error) {
-          console.error("🔄 ClientLayout: Error during redirect:", error)
+          console.error("ClientLayout: Error during redirect:", error)
         }
       }, 100)
     } else {
-      console.log("🔄 ClientLayout: No redirect needed - conditions not met")
+      console.log("ClientLayout: No redirect needed - conditions not met")
     }
   }, [isAuthenticated, isPublicPage, authLoading, pathname, router, user])
 

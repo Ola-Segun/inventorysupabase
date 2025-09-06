@@ -39,13 +39,15 @@ export default function AcceptInvitationPage() {
   const [success, setSuccess] = useState(false)
 
   const [formData, setFormData] = useState({
-    name: '',
-    password: '',
-    confirmPassword: ''
+    name: ''
   })
 
   useEffect(() => {
+    console.log('🔗 ACCEPT INVITATION PAGE: useEffect triggered')
+    console.log('🔗 ACCEPT INVITATION PAGE: Token from URL:', token)
+
     if (!token) {
+      console.log('🔗 ACCEPT INVITATION PAGE: No token found, setting error')
       setError('Invalid invitation link')
       setLoading(false)
       return
@@ -56,17 +58,27 @@ export default function AcceptInvitationPage() {
 
   const validateInvitation = async () => {
     try {
+      console.log('🔗 ACCEPT INVITATION PAGE: Starting invitation validation')
+      console.log('🔗 ACCEPT INVITATION PAGE: Fetching:', `/api/auth/invitations/${token}`)
+
       const response = await fetch(`/api/auth/invitations/${token}`)
+      console.log('🔗 ACCEPT INVITATION PAGE: Response status:', response.status)
+
       const data = await response.json()
+      console.log('🔗 ACCEPT INVITATION PAGE: Response data:', data)
 
       if (!response.ok) {
+        console.log('🔗 ACCEPT INVITATION PAGE: Response not OK, throwing error')
         throw new Error(data.error || 'Invalid invitation')
       }
 
+      console.log('🔗 ACCEPT INVITATION PAGE: Setting invitation data')
       setInvitation(data.invitation)
     } catch (error: any) {
+      console.log('🔗 ACCEPT INVITATION PAGE: Error occurred:', error.message)
       setError(error.message)
     } finally {
+      console.log('🔗 ACCEPT INVITATION PAGE: Setting loading to false')
       setLoading(false)
     }
   }
@@ -79,18 +91,14 @@ export default function AcceptInvitationPage() {
     try {
       // Validate form for new users
       if (!invitation?.user_exists) {
-        if (!formData.name || !formData.password) {
-          throw new Error('Name and password are required')
-        }
-
-        if (formData.password.length < 8) {
-          throw new Error('Password must be at least 8 characters long')
-        }
-
-        if (formData.password !== formData.confirmPassword) {
-          throw new Error('Passwords do not match')
+        if (!formData.name) {
+          throw new Error('Name is required')
         }
       }
+
+      console.log('🔄 ACCEPT INVITATION: Making POST request to accept invitation')
+      console.log('🔄 ACCEPT INVITATION: Token:', token?.substring(0, 10) + '...')
+      console.log('🔄 ACCEPT INVITATION: Request body:', { name: formData.name })
 
       const response = await fetch(`/api/auth/invitations/${token}`, {
         method: 'POST',
@@ -99,9 +107,11 @@ export default function AcceptInvitationPage() {
         },
         body: JSON.stringify({
           name: formData.name,
-          password: formData.password,
         }),
       })
+
+      console.log('🔄 ACCEPT INVITATION: Response status:', response.status)
+      console.log('🔄 ACCEPT INVITATION: Response data:', await response.clone().json())
 
       const data = await response.json()
 
@@ -113,11 +123,8 @@ export default function AcceptInvitationPage() {
 
       // Redirect after success
       setTimeout(() => {
-        if (data.requires_email_confirmation && invitation) {
-          router.push('/auth/signup-success?email=' + encodeURIComponent(invitation.email))
-        } else {
-          router.push('/login?message=invitation_accepted')
-        }
+        // Since we auto-confirm emails via admin API, always redirect to login
+        router.push('/login?message=invitation_accepted')
       }, 2000)
 
     } catch (error: any) {
@@ -220,31 +227,11 @@ export default function AcceptInvitationPage() {
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    minLength={8}
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    Must be at least 8 characters long
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    required
-                  />
-                </div>
+                <Alert>
+                  <AlertDescription>
+                    Your initial login credentials have been sent to your email. You can change your password after logging in.
+                  </AlertDescription>
+                </Alert>
               </>
             )}
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, AlertCircle } from "lucide-react"
+import { Package, AlertCircle, Loader2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
@@ -260,7 +260,7 @@ export default function LoginPage() {
                   </Label>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Logging in..." : "Login"}
+                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Logging in...</> : "Login"}
                 </Button>
 
               </form>
@@ -312,7 +312,7 @@ export default function LoginPage() {
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-sm text-center text-muted-foreground">
             Don't have an account?{" "}
-            <Button variant="link" className="px-1 text-sm">
+            <Button variant="link" className="px-1 text-sm" onClick={() => router.push('/signup')}>
               Sign up
             </Button>
           </div>

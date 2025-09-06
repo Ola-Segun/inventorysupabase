@@ -488,7 +488,75 @@ export async function POST(request: NextRequest) {
       hasErrors = true
     }
 
-    // Step 10: Create default organization
+    // Step 10: Fix users foreign key constraint
+    try {
+      await supabase.rpc('exec_sql', {
+        sql: `
+          -- First, let's check what constraints exist on the users table
+          DO $$
+          DECLARE
+              constraint_record RECORD;
+          BEGIN
+              RAISE NOTICE 'Checking existing constraints on users table...';
+
+              FOR constraint_record IN
+                  SELECT conname, pg_get_constraintdef(oid) as constraint_def
+                  FROM pg_constraint
+                  WHERE conrelid = 'users'::regclass
+                  AND conname LIKE '%id%'
+              LOOP
+                  RAISE NOTICE 'Found constraint: % - %', constraint_record.conname, constraint_record.constraint_def;
+              END LOOP;
+          END $$;
+
+          -- Drop the incorrect foreign key constraint if it exists
+          ALTER TABLE users DROP CONSTRAINT IF EXISTS users_id_fkey;
+
+          -- Verify the constraint was dropped
+          DO $$
+          BEGIN
+              IF EXISTS (
+                  SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'users'::regclass
+                  AND conname = 'users_id_fkey'
+              ) THEN
+                  RAISE EXCEPTION 'Failed to drop users_id_fkey constraint';
+              ELSE
+                  RAISE NOTICE 'Successfully dropped users_id_fkey constraint';
+              END IF;
+          END $$;
+
+          -- Add the correct foreign key constraint
+          ALTER TABLE users ADD CONSTRAINT users_id_fkey
+              FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+          -- Verify the constraint was created correctly
+          DO $$
+          DECLARE
+              constraint_def TEXT;
+          BEGIN
+              SELECT pg_get_constraintdef(oid) INTO constraint_def
+              FROM pg_constraint
+              WHERE conrelid = 'users'::regclass
+              AND conname = 'users_id_fkey';
+
+              IF constraint_def IS NULL THEN
+                  RAISE EXCEPTION 'Failed to create users_id_fkey constraint';
+              ELSIF constraint_def NOT LIKE '%auth.users%' THEN
+                  RAISE EXCEPTION 'Constraint created but not pointing to auth.users: %', constraint_def;
+              ELSE
+                  RAISE NOTICE 'Successfully created correct users_id_fkey constraint: %', constraint_def;
+              END IF;
+          END $$;
+        `
+      })
+      results.push({ step: 'Fix users foreign key', status: 'success', message: 'Users foreign key constraint fixed with verification' })
+    } catch (error: any) {
+      results.push({ step: 'Fix users foreign key', status: 'error', message: error.message })
+      hasErrors = true
+    }
+
+    // Step 11: Create default organization
     try {
       await supabase.rpc('exec_sql', {
         sql: `

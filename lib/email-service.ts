@@ -329,8 +329,10 @@ const getInvitationEmailTemplate = (data: {
   role: string
   message?: string
   expiresIn: string
+  initialPassword?: string
+  email?: string
 }) => {
-  const { recipientName, inviterName, invitationUrl, role, message, expiresIn } = data
+  const { recipientName, inviterName, invitationUrl, role, message, expiresIn, initialPassword, email } = data
 
   return {
     subject: `You're invited to join our team - ${role}`,
@@ -366,6 +368,8 @@ const getInvitationEmailTemplate = (data: {
           <p>To accept this invitation and create your account, please click the button below:</p>
 
           <a href="${invitationUrl}" class="button">Accept Invitation</a>
+
+          ${initialPassword ? `<div class="highlight"><p><strong>Your Initial Login Credentials:</strong></p><p><strong>Email:</strong> ${email || 'your-email@example.com'}</p><p><strong>Password:</strong> ${initialPassword}</p><p style="color: #d32f2f;"><em>Please save these credentials and change your password after first login.</em></p></div>` : ''}
 
           <p><strong>Important:</strong> This invitation will expire in ${expiresIn}.</p>
 
@@ -480,12 +484,28 @@ export const emailService = {
     role: string
     message?: string
     expiresIn: string
+    initialPassword?: string
+    email?: string
   }) {
     const emailServiceInstance = createEmailService()
     const config = getEmailConfig()
 
     try {
+      console.log('📧 EMAIL SERVICE: Preparing invitation email template')
+      console.log('📧 EMAIL SERVICE: Template data:', {
+        recipientName: data.recipientName,
+        inviterName: data.inviterName,
+        role: data.role,
+        hasInitialPassword: !!data.initialPassword,
+        initialPasswordLength: data.initialPassword?.length || 0,
+        email: data.email,
+        invitationUrl: data.invitationUrl.substring(0, 50) + '...'
+      })
+
       const template = getInvitationEmailTemplate(data)
+
+      console.log('📧 EMAIL SERVICE: Template generated successfully')
+      console.log('📧 EMAIL SERVICE: Email includes initial password:', template.html.includes(data.initialPassword || ''))
 
       const mailOptions = {
         from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@example.com',

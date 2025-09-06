@@ -119,10 +119,16 @@ export async function POST(request: NextRequest) {
       console.log(`Cleaned up ${expiredInvitations.length} old invitations for ${email}`)
     }
 
-    // Generate invitation token
+    // Generate invitation token and initial password
     const invitationToken = crypto.randomBytes(32).toString('hex')
+    const initialPassword = crypto.randomBytes(8).toString('hex') // Generate secure 16-character password
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
+
+    console.log('🔑 INVITATION CREATION: Generated credentials')
+    console.log('🔑 INVITATION CREATION: Token preview:', invitationToken.substring(0, 10) + '...')
+    console.log('🔑 INVITATION CREATION: Initial password length:', initialPassword.length)
+    console.log('🔑 INVITATION CREATION: Expires at:', expiresAt.toISOString())
 
     // Create invitation record
     const { data: invitation, error: invitationError } = await supabase
@@ -135,7 +141,10 @@ export async function POST(request: NextRequest) {
         invitation_token: invitationToken,
         expires_at: expiresAt.toISOString(),
         status: 'pending',
-        message: message || null
+        message: message || null,
+        store_id: userProfile.store_id,
+        organization_id: userProfile.organization_id,
+        initial_password: initialPassword // Store the initial password
       })
       .select()
       .single()
@@ -178,7 +187,9 @@ export async function POST(request: NextRequest) {
       invitationUrl,
       role,
       message,
-      expiresIn: '7 days'
+      expiresIn: '7 days',
+      initialPassword,
+      email
     })
 
     console.log('📧 INVITATION API: Email service response:', {
